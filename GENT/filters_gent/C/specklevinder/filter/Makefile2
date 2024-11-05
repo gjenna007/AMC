@@ -1,0 +1,24 @@
+
+CC=gcc -Wall -ggdb -lefence -I/usr/X11R6/include -I/usr/local/include -L/usr/X11R6/lib -L/usr/local/lib -lX11 -lXext -ljpeg -lpng -ltiff  -lz -lgif -lm -lImlib 
+
+OBJECTEN= specklevinder.o groeispeckle.o randjemaken.o klassificeer.o filter.o
+
+filter: $(OBJECTEN)
+	$(CC) $(OBJECTEN) -o filter
+
+groeispeckle.o: groeispeckle.c structures.h definitions.h
+	$(CC) -c groeispeckle.c
+
+randjemaken.o: randjemaken.c definitions.h  
+	$(CC) -c randjemaken.c
+
+specklevinder.o: specklevinder.c structures.h definitions.h
+	$(CC) -c specklevinder.c
+
+klassificeer.o: klassificeer.c structures.h definitions.h
+	$(CC) -c klassificeer.c
+
+filter.o: filter.c definitions.h
+	$(CC) -c filter.c
+clear:
+	rm *.o

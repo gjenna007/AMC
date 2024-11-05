@@ -1,0 +1,42 @@
+DatasetHeader Begin
+	Version		= "5.5"
+	LastUpdated	= Wed Jun 14 09:13:20 GMT 2000
+	DataSetType	= ERStorage
+	DataType	= Raster
+	ByteOrder	= MSBFirst
+	CoordinateSpace Begin
+		Datum		= "RAW"
+		Projection	= "RAW"
+		CoordinateType	= RAW
+		Rotation	= 0:0:0.0
+	CoordinateSpace End
+	RasterInfo Begin
+		CellType	= Unsigned8BitInteger
+		CellInfo Begin
+			Xdimension	= 1.41015625
+			Ydimension	= 0.98828125
+		CellInfo End
+		NrOfLines	= 512
+		NrOfCellsPerLine	= 512
+		NrOfBands	= 1
+		BandId Begin
+			Value		= "Pseudo Layer"
+		BandId End
+		RegionInfo Begin
+			Type		= Polygon
+			RegionName	= "All"
+			SourceDataset	= "/v/gs/C/eigenfilter/deruddere03frost_7x7_10"
+			RGBcolour Begin
+				Red			= 65535
+				Green		= 65535
+				Blue		= 65535
+			RGBcolour End
+			SubRegion	= {
+				0	0
+				0	512
+				512	512
+				512	0
+			}
+		RegionInfo End
+	RasterInfo End
+DatasetHeader End

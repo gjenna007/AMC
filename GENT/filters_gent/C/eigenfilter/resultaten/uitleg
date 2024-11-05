@@ -1,0 +1,43 @@
+In deze file vind je de uitleg welke resulten je precies in welke directorie
+kunt terugvinden.
+De verschillende beelden in A zijn bewerkt met het filter: filtermetmasker.
+Daarin worden verschillende parameters ingesteld:
+
+mask, tolerantie, thetax, thetay, intersampling, mingebiedsgrootte,
+maxgebiedsgrootte, kleurstap, maxaantiteraties.
+
+Directorie 	Instellingen
+
+A		mask=11
+		tolerantie=4
+		thetax=1
+		thetay=0
+		intersampling=1
+		mingebiedsgrootte=100
+		maxgebiedsgrootte=150000
+		kleurstap=**
+		maxaantiteraties=12
+		bottomcontrast 4500
+		topcontrast    6000
+		
+De beelden in B zijn bewerkt met filtermetmasker_gemgrijs 3/6/00
+
+B 		mask=11
+		tolerantie=4
+		thetax=1
+		thetay=0
+		intersampling=1
+		mingebiedsgrootte=100
+		maxgebiedsgrootte=150000
+		kleurstap=**
+		maxaantaliteraties=12
+		bottomcontrast=4500
+		topcontrast=6000
+		grensgrijswaarde=70
+		
+De beelden in C zijn die, bewerkt met het frost of het lee filter.
+De syntax is als voglt: naam_frost/lee_windowsize_optionalparameter.tif
+(Bij die optionalparameter wordt de decimale punt weggelaten; dus 07
+betekent 0.7, en 10 betekent 1.0)
+		
+

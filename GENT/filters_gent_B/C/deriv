@@ -1,0 +1,287 @@
+/*---------------------------------------------------------------------------*/
+/* Program:  deriv.c                                                         */
+/*                                                                           */
+/* Purpose:  This program calculates the specified derivative of the         */
+/*           input image in the spatial domain.  High order derivatives      */
+/*           are computed based on repeated first order derivatives. A       */
+/*           variety of finite difference masks are implemented:             */
+/*                                                                           */
+/*              -d 1x2 finite difference                                     */
+/*              -r Roberts 2x2 mask                                          */
+/*              -s Sobel 3x3 mask                                            */
+/*              -c cubic spline 3x3 mask                                     */
+/*              -f frequency domain derivative                               */
+/*                                                                           */
+/* Author:   John Gauch                                                      */
+/*                                                                           */
+/* Date:     April 4, 1994 - Original program.                               */
+/*           June 20, 1996 - Added frequency domain derivative.              */
+/*                                                                           */
+/* Note:     Copyright (C) The University of Kansas, 1994-1996               */
+/*---------------------------------------------------------------------------*/
+#include <IM.h>
+#define DEFAULT 1
+#define ROBERTS 2
+#define SOBEL   3
+#define CUBIC   4
+#define FREQ    5
+
+/* Global variables */
+int Xderiv = 1, Yderiv = 0;
+int Method = DEFAULT;
+char Name1[50];
+char Name2[50];
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This routine calculates the derivatives.                        */
+/*---------------------------------------------------------------------------*/
+void SpatialDeriv()
+{
+   IM_TYPE *Image1;
+   IM_TYPE *Image2;
+   FLOAT_TYPE **Data1;
+   FLOAT_TYPE **Data2;
+   int PixType, Xdim, Ydim, Zdim, DimCnt;
+   int i, x, y;
+
+   /* Read input image */
+   Image1 = im_open(Name1, &PixType, &Xdim, &Ydim, &Zdim, &DimCnt);
+   if (DimCnt != 2)
+      Error("Can not process 1D or 3D images");
+   Data1 = (FLOAT_TYPE **) im_alloc2D(Image1, FLOAT);
+   im_read(Image1, FLOAT, (char *) &(Data1[0][0]));
+
+   /* Create output image */
+   Image2 = im_create(Name2, FLOAT, Xdim, Ydim, Zdim);
+   Data2 = (FLOAT_TYPE **) im_alloc2D(Image2, FLOAT);
+
+   /* Iteratively apply X derivative */
+   for (i = 0; i < Xderiv; i++)
+   {
+      /* Calculate derivative */
+      if (Method == DEFAULT)
+         for (y = 1; y < (Ydim - 1); y++)
+            for (x = 1; x < (Xdim - 1); x++)
+               Data2[y][x] = Data1[y][x] - Data1[y][x - 1];
+
+      else if (Method == ROBERTS)
+         for (y = 1; y < (Ydim - 1); y++)
+            for (x = 1; x < (Xdim - 1); x++)
+               Data2[y][x] = Data1[y][x] - Data1[y - 1][x - 1];
+
+      else if (Method == SOBEL)
+         for (y = 1; y < (Ydim - 1); y++)
+            for (x = 1; x < (Xdim - 1); x++)
+               Data2[y][x] = (Data1[y + 1][x + 1] + 2 * Data1[y][x + 1] + Data1[y - 1][x + 1]
+                              - Data1[y + 1][x - 1] - 2 * Data1[y][x - 1] - Data1[y - 1][x - 1]) / 8;
+
+      else if (Method == CUBIC)
+         for (y = 1; y < (Ydim - 1); y++)
+            for (x = 1; x < (Xdim - 1); x++)
+               Data2[y][x] = (Data1[y + 1][x + 1]
+                              + 4 * Data1[y][x + 1]
+                              + Data1[y - 1][x + 1]
+                              - Data1[y + 1][x - 1]
+                              - 4 * Data1[y][x - 1]
+                              - Data1[y - 1][x - 1]) / 12;
+
+      /* Copy data back to input image */
+      for (y = 1; y < (Ydim - 1); y++)
+         for (x = 1; x < (Xdim - 1); x++)
+            Data1[y][x] = Data2[y][x];
+      for (x = 0; x < Xdim; x++)
+      {
+         Data1[0][x] = Data2[0][x] = Data2[1][x];
+         Data1[Ydim - 1][x] = Data2[Ydim - 1][x] = Data2[Ydim - 2][x];
+      }
+      for (y = 0; y < Ydim; y++)
+      {
+         Data1[y][0] = Data2[y][0] = Data2[y][1];
+         Data1[y][Xdim - 1] = Data2[y][Xdim - 1] = Data2[y][Xdim - 2];
+      }
+   }
+
+   /* Iteratively apply Y derivative */
+   for (i = 0; i < Yderiv; i++)
+   {
+      /* Calculate derivative */
+      if (Method == DEFAULT)
+         for (y = 1; y < (Ydim - 1); y++)
+            for (x = 1; x < (Xdim - 1); x++)
+               Data2[y][x] = Data1[y][x] - Data1[y - 1][x];
+
+      else if (Method == ROBERTS)
+         for (y = 1; y < (Ydim - 1); y++)
+            for (x = 1; x < (Xdim - 1); x++)
+               Data2[y][x] = Data1[y - 1][x] - Data1[y][x - 1];
+
+      else if (Method == SOBEL)
+         for (y = 1; y < (Ydim - 1); y++)
+            for (x = 1; x < (Xdim - 1); x++)
+               Data2[y][x] = (Data1[y + 1][x + 1] + 2 * Data1[y + 1][x] + Data1[y + 1][x - 1]
+                              - Data1[y - 1][x + 1] - 2 * Data1[y - 1][x] - Data1[y - 1][x - 1]) / 8;
+
+      else if (Method == CUBIC)
+         for (y = 1; y < (Ydim - 1); y++)
+            for (x = 1; x < (Xdim - 1); x++)
+               Data2[y][x] = (Data1[y + 1][x + 1] + 4 * Data1[y + 1][x] + Data1[y + 1][x - 1]
+                              - Data1[y - 1][x + 1] - 4 * Data1[y - 1][x] - Data1[y - 1][x - 1]) / 12;
+
+      /* Copy data back to input image */
+      for (y = 1; y < (Ydim - 1); y++)
+         for (x = 1; x < (Xdim - 1); x++)
+            Data1[y][x] = Data2[y][x];
+      for (x = 0; x < Xdim; x++)
+      {
+         Data1[0][x] = Data2[0][x] = Data2[1][x];
+         Data1[Ydim - 1][x] = Data2[Ydim - 1][x] = Data2[Ydim - 2][x];
+      }
+      for (y = 0; y < Ydim; y++)
+      {
+         Data1[y][0] = Data2[y][0] = Data2[y][1];
+         Data1[y][Xdim - 1] = Data2[y][Xdim - 1] = Data2[y][Xdim - 2];
+      }
+   }
+
+   /* Write information to output image */
+   im_write(Image2, FLOAT, (char *) &(Data2[0][0]));
+   im_free2D((char **) Data1);
+   im_free2D((char **) Data2);
+}
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This routine calculates the derivatives.                        */
+/*---------------------------------------------------------------------------*/
+void FreqDeriv()
+{
+   IM_TYPE *Image1;
+   IM_TYPE *Image2;
+   COMPLEX_TYPE **Data;
+   int PixType, Xdim, Ydim, Zdim, DimCnt;
+   int x, y, u, v;
+   float filter;
+   float temp;
+
+   /* Read input image and create output image */
+   Image1 = im_open(Name1, &PixType, &Xdim, &Ydim, &Zdim, &DimCnt);
+   if (DimCnt != 2)
+      Error("Can not process 1D or 3D images");
+   Data = (COMPLEX_TYPE **) im_alloc2D(Image1, COMPLEX);
+   im_read(Image1, COMPLEX, (char *) &(Data[0][0]));
+   Image2 = im_create(Name2, FLOAT, Xdim, Ydim, Zdim);
+
+   /* Convert image to frequency domain */
+   if (fft_2d(&(Data[0][0]), Xdim, Ydim, -1) == INVALID)
+      Error("Could not perform forward FFT");
+
+   /* Calculate derivative */
+   for (v = (-Ydim / 2); v < Ydim / 2; v++)
+      for (u = (-Xdim / 2); u < Xdim / 2; u++)
+      {
+         /* Calculate filter value */
+         filter = (float) (pow((2 * M_PI * u) / Xdim, (double) Xderiv)
+                           * pow((2 * M_PI * v) / Ydim, (double) Yderiv));
+         x = (u + Xdim) % Xdim;
+         y = (v + Ydim) % Ydim;
+
+         /* Apply filter to image */
+         switch ((Xderiv + Yderiv) % 4)
+         {
+         case 0:                /* (a + bi) * (f + 0i) */
+            Data[y][x].re = Data[y][x].re * filter;
+            Data[y][x].im = Data[y][x].im * filter;
+            break;
+         case 1:                /* (a + bi) * (0 + fi) */
+            temp = Data[y][x].re;
+            Data[y][x].re = -Data[y][x].im * filter;
+            Data[y][x].im = temp * filter;
+            break;
+         case 2:                /* (a + bi) * (-f + 0i) */
+            Data[y][x].re = -Data[y][x].re * filter;
+            Data[y][x].im = -Data[y][x].im * filter;
+            break;
+         case 3:                /* (a + bi) * (0 - fi) */
+            temp = Data[y][x].re;
+            Data[y][x].re = Data[y][x].im * filter;
+            Data[y][x].im = -temp * filter;
+            break;
+         }
+      }
+
+   /* Convert image back to spatial domain */
+   if (fft_2d(&(Data[0][0]), Xdim, Ydim, 1) == INVALID)
+      Error("Could not perform inverse FFT");
+
+   /* Write information to output image */
+   im_write(Image2, COMPLEX, (char *) &(Data[0][0]));
+   im_free2D((char **) Data);
+}
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This is the main program.                                       */
+/*---------------------------------------------------------------------------*/
+int main(int argc, char *argv[])
+{
+   /* Program variables */
+   int i = 0;
+
+   /* Interpret program options */
+   printf("DERIV Program - KUIM Version 1.0\n\n");
+   while ((++i < argc) && (argv[i][0] == '-'))
+      switch (argv[i][1])
+      {
+      case 'd':
+         Method = DEFAULT;
+         break;
+      case 'r':
+         Method = ROBERTS;
+         break;
+      case 's':
+         Method = SOBEL;
+         break;
+      case 'c':
+         Method = CUBIC;
+         break;
+      case 'f':
+         Method = FREQ;
+         break;
+      case 'x':
+         if (sscanf(argv[++i], "%d", &Xderiv) == 0)
+            Error("Could not get order of X derivative");
+         break;
+      case 'y':
+         if (sscanf(argv[++i], "%d", &Yderiv) == 0)
+            Error("Could not get order of Y derivative");
+         break;
+      default:
+         Error("Invalid option encountered");
+         break;
+      }
+
+   /* Check number of file names */
+   if (argc - i != 2)
+   {
+      fprintf(stderr, "Usage: deriv [options] infile outfile\n");
+      fprintf(stderr, "       [-d]    Use finite difference (default)\n");
+      fprintf(stderr, "       [-r]    Use Robert's operator\n");
+      fprintf(stderr, "       [-s]    Use Sobel's operator\n");
+      fprintf(stderr, "       [-c]    Use cubic spline operator\n");
+      fprintf(stderr, "       [-f]    Use frequency domain\n");
+      fprintf(stderr, "       [-x #]  Order derivatives in X direction (1)\n");
+      fprintf(stderr, "       [-y #]  Order derivatives in Y direction (0)\n");
+      exit(1);
+   }
+
+   /* Get image file names from argument list */
+   if (sscanf(argv[i++], "%s", Name1) == 0)
+      Error("Could not get input file name");
+   if (sscanf(argv[i++], "%s", Name2) == 0)
+      Error("Could not get output file name");
+
+   /* Do frequency domain or spatial domain processing */
+   if (Method != FREQ)
+      SpatialDeriv();
+   else
+      FreqDeriv();
+   return (0);
+}

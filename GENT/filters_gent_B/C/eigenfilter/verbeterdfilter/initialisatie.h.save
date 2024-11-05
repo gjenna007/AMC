@@ -1,0 +1,19 @@
+
+#include "definities.h"
+
+extern int width, height;
+extern int *scanbijhouder;
+extern ImlibImage* silhouet;
+extern struct Kleur* kleur;
+extern InitScanbijhouder(int *scanbijhouder, int width, int height,
+                         const ImlibImage* silhouet);
+extern InitVulkleur (struct Kleur* kleur);
+
+
+
+
+
+
+
+
+

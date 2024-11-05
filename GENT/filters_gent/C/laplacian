@@ -1,0 +1,444 @@
+/*---------------------------------------------------------------------------*/
+/* Program:  laplacian.c                                                     */
+/*                                                                           */
+/* Purpose:  This program calculates the Laplacian of the input image.       */
+/*           Zeros of the Laplacian were invented by Marr & Hildreth         */
+/*           for edge detection.                                             */
+/*                                                                           */
+/* Author:   John Gauch, Edu Metz                                            */
+/*                                                                           */
+/* Date:     April 1, 1994  - Original program.                              */
+/*           August 9, 1994 - Extended to color and 3D.                      */
+/*           June 21, 1997  - Corrected bugs in color.                       */
+/*           July 30, 1997  - Simplified color, vector, scalar code.         */
+/*                                                                           */
+/* Note:     Copyright (C) The University of Kansas, 1994                    */
+/*---------------------------------------------------------------------------*/
+#include <IM.h>
+#define W1 0.125
+#define W2 0.25
+
+/* Image variables */
+int Debug = FALSE;
+int Zeros = FALSE;
+float Thresh = 10.0;
+char Name1[50];
+char Name2[50];
+IM_TYPE *Image1;
+IM_TYPE *Image2;
+int PixType, Xdim, Ydim, Zdim, DimCnt;
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  Locate zero crossings in image.                                 */
+/*---------------------------------------------------------------------------*/
+void ZeroCross(FLOAT_TYPE ** Input, FLOAT_TYPE ** Grad, SHORT_TYPE ** Output)
+{
+   int x, y;
+   float Ave;
+
+   /* Loop through rows looking for zero crossings */
+   for (y = 1; y < (Ydim - 1); y++)
+      for (x = 1; x < (Xdim - 1); x++)
+      {
+         /* Mark pixel location closest to zero */
+         if ((Input[y][x - 1] < 0.0) && (Input[y][x] >= 0.0))
+            if (-Input[y][x - 1] < Input[y][x])
+               Output[y][x - 1] = 1;
+            else
+               Output[y][x] = 1;
+
+         /* Mark pixel location closest to zero */
+         if ((Input[y][x] < 0.0) && (Input[y][x - 1] >= 0.0))
+            if (-Input[y][x] < Input[y][x - 1])
+               Output[y][x] = 1;
+            else
+               Output[y][x - 1] = 1;
+      }
+
+   /* Loop through columns looking for zero crossings */
+   for (y = 1; y < (Ydim - 1); y++)
+      for (x = 1; x < (Xdim - 1); x++)
+      {
+         /* Mark pixel location closest to zero */
+         if ((Input[y - 1][x] < 0.0) && (Input[y][x] >= 0.0))
+            if (-Input[y - 1][x] < Input[y][x])
+               Output[y - 1][x] = 1;
+            else
+               Output[y][x] = 1;
+
+         /* Mark pixel location closest to zero */
+         if ((Input[y][x] < 0.0) && (Input[y - 1][x] >= 0.0))
+            if (-Input[y][x] < Input[y - 1][x])
+               Output[y][x] = 1;
+            else
+               Output[y - 1][x] = 1;
+      }
+
+   /* Remove phantom edges */
+   for (y = 1; y < (Ydim - 1); y++)
+      for (x = 1; x < (Xdim - 1); x++)
+         if (Output[y][x] == 1)
+         {
+            Ave = (Grad[y + 1][x + 1] + Grad[y][x + 1]
+                   + Grad[y - 1][x + 1] + Grad[y + 1][x]
+                   + Grad[y][x] + Grad[y - 1][x]
+                   + Grad[y + 1][x - 1] + Grad[y][x - 1]
+                   + Grad[y - 1][x - 1]) / 9;
+            if ((Grad[y][x] < Ave) || (Grad[y][x] < Thresh))
+               Output[y][x] = 0;
+         }
+}
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This routine calculates the Laplacian of a scalar image.        */
+/*---------------------------------------------------------------------------*/
+void LapScalar()
+{
+   FLOAT_TYPE **Data1;
+   FLOAT_TYPE **Data2;
+   FLOAT_TYPE **Data3;
+   SHORT_TYPE **Data4;
+   int x, y;
+   float Dx, Dy, Dxx, Dyy;
+
+   /* Read input image */
+   Data1 = (FLOAT_TYPE **) im_alloc2D(Image1, FLOAT);
+   im_read(Image1, FLOAT, (char *) &(Data1[0][0]));
+
+   /* Create output image */
+   if (Zeros == TRUE)
+      Image2 = im_create(Name2, SHORT, Xdim, Ydim, 1);
+   else
+      Image2 = im_create(Name2, FLOAT, Xdim, Ydim, 1);
+   Data2 = (FLOAT_TYPE **) im_alloc2D(Image2, FLOAT);
+   Data3 = (FLOAT_TYPE **) im_alloc2D(Image2, FLOAT);
+   Data4 = (SHORT_TYPE **) im_alloc2D(Image2, SHORT);
+
+   /* Process image */
+   for (y = 1; y < (Ydim - 1); y++)
+      for (x = 1; x < (Xdim - 1); x++)
+      {
+         /* Use cubic splines to estimate derivatives */
+         Dx = (Data1[y + 1][x + 1] + 2 * Data1[y][x + 1]
+               + Data1[y - 1][x + 1] - Data1[y + 1][x - 1]
+               - 2 * Data1[y][x - 1] - Data1[y - 1][x - 1]) / 8;
+
+         Dy = (Data1[y + 1][x + 1] + 2 * Data1[y + 1][x]
+               + Data1[y + 1][x - 1] - Data1[y - 1][x + 1]
+               - 2 * Data1[y - 1][x] - Data1[y - 1][x - 1]) / 8;
+
+         Dxx = (Data1[y + 1][x + 1] + 4 * Data1[y][x + 1]
+                + Data1[y - 1][x + 1] - 2 * Data1[y + 1][x]
+                - 8 * Data1[y][x] - 2 * Data1[y - 1][x]
+                + Data1[y + 1][x - 1] + 4 * Data1[y][x - 1]
+                + Data1[y - 1][x - 1]) / 6;
+
+         Dyy = (Data1[y + 1][x + 1] - 2 * Data1[y][x + 1]
+                + Data1[y - 1][x + 1] + 4 * Data1[y + 1][x]
+                - 8 * Data1[y][x] + 4 * Data1[y - 1][x]
+                + Data1[y + 1][x - 1] - 2 * Data1[y][x - 1]
+                + Data1[y - 1][x - 1]) / 6;
+
+         /* Calculate directional derivative */
+         Data3[y][x] = (float) sqrt((double) Dx * Dx + Dy * Dy) + 0.01;
+         Data2[y][x] = Dxx + Dyy;
+      }
+
+   /* Handle boundary rows and columns */
+   for (x = 0; x < Xdim; x++)
+   {
+      Data2[0][x] = Data2[1][x];
+      Data2[Ydim - 1][x] = Data2[Ydim - 2][x];
+   }
+   for (y = 0; y < Ydim; y++)
+   {
+      Data2[y][0] = Data2[y][1];
+      Data2[y][Xdim - 1] = Data2[y][Xdim - 2];
+   }
+
+   /* Write information to output image */
+   if (Zeros == TRUE)
+   {
+      ZeroCross(Data2, Data3, Data4);
+      im_write(Image2, SHORT, (char *) &(Data4[0][0]));
+   }
+   else
+      im_write(Image2, FLOAT, (char *) &(Data2[0][0]));
+   im_free2D((char **) Data1);
+   im_free2D((char **) Data2);
+   im_free2D((char **) Data3);
+   im_free2D((char **) Data4);
+}
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This routine calculates the Laplacian of vector image.          */
+/*---------------------------------------------------------------------------*/
+void LapVector()
+{
+   FLOAT_TYPE ***Data1;
+   FLOAT_TYPE **Data2;
+   FLOAT_TYPE **Data3;
+   SHORT_TYPE **Data4;
+   int x, y, z;
+   float Dx[3], Dy[3], Dxx[3], Dyy[3];
+
+   /* Read input image */
+   Data1 = (FLOAT_TYPE ***) im_alloc3D(Image1, FLOAT);
+   im_read(Image1, FLOAT, (char *) &(Data1[0][0][0]));
+
+   /* Create output image */
+   if (Zeros == TRUE)
+      Image2 = im_create(Name2, SHORT, Xdim, Ydim, 1);
+   else
+      Image2 = im_create(Name2, FLOAT, Xdim, Ydim, 1);
+   Data2 = (FLOAT_TYPE **) im_alloc2D(Image2, FLOAT);
+   Data3 = (FLOAT_TYPE **) im_alloc2D(Image2, FLOAT);
+   Data4 = (SHORT_TYPE **) im_alloc2D(Image2, SHORT);
+
+   /* Process image */
+   for (y = 1; y < (Ydim - 1); y++)
+      for (x = 1; x < (Xdim - 1); x++)
+      {
+         /* Use cubic splines to estimate derivatives */
+         for (z = 0; z < 3; z++)
+         {
+            Dx[z] = (Data1[z][y + 1][x + 1] + 2 * Data1[z][y][x + 1]
+                     + Data1[z][y - 1][x + 1] - Data1[z][y + 1][x - 1]
+                     - 2 * Data1[z][y][x - 1] - Data1[z][y - 1][x - 1]) / 8;
+
+            Dy[z] = (Data1[z][y + 1][x + 1] + 2 * Data1[z][y + 1][x]
+                     + Data1[z][y + 1][x - 1] - Data1[z][y - 1][x + 1]
+                     - 2 * Data1[z][y - 1][x] - Data1[z][y - 1][x - 1]) / 8;
+
+            Dxx[z] = (Data1[z][y + 1][x + 1] + 4 * Data1[z][y][x + 1]
+                      + Data1[z][y - 1][x + 1] - 2 * Data1[z][y + 1][x]
+                      - 8 * Data1[z][y][x] - 2 * Data1[z][y - 1][x]
+                      + Data1[z][y + 1][x - 1] + 4 * Data1[z][y][x - 1]
+                      + Data1[z][y - 1][x - 1]) / 6;
+
+            Dyy[z] = (Data1[z][y + 1][x + 1] - 2 * Data1[z][y][x + 1]
+                      + Data1[z][y - 1][x + 1] + 4 * Data1[z][y + 1][x]
+                      - 8 * Data1[z][y][x] + 4 * Data1[z][y - 1][x]
+                      + Data1[z][y + 1][x - 1] - 2 * Data1[z][y][x - 1]
+                      + Data1[z][y - 1][x - 1]) / 6;
+         }
+
+         /* Calculate directional derivative */
+         Data3[y][x] = (float) sqrt((double)
+                            (Dx[0] * Dx[0] + Dx[1] * Dx[1] + Dx[2] * Dx[2] +
+                             Dy[0] * Dy[0] + Dy[1] * Dy[1] + Dy[2] * Dy[2]));
+         Data2[y][x] = Dxx[0] + Dyy[0] + Dxx[1] + Dyy[1] + Dxx[2] + Dyy[2];
+      }
+
+   /* Handle boundary rows and columns */
+   for (x = 0; x < Xdim; x++)
+   {
+      Data2[0][x] = Data2[1][x];
+      Data2[Ydim - 1][x] = Data2[Ydim - 2][x];
+   }
+   for (y = 0; y < Ydim; y++)
+   {
+      Data2[y][0] = Data2[y][1];
+      Data2[y][Xdim - 1] = Data2[y][Xdim - 2];
+   }
+
+   /* Write information to output image */
+   if (Zeros == TRUE)
+   {
+      ZeroCross(Data2, Data3, Data4);
+      im_write(Image2, SHORT, (char *) &(Data4[0][0]));
+   }
+   else
+      im_write(Image2, FLOAT, (char *) &(Data2[0][0]));
+   im_free3D((char ***) Data1);
+   im_free2D((char **) Data2);
+   im_free2D((char **) Data3);
+   im_free2D((char **) Data4);
+}
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This routine calculates the Laplacian of a color image.         */
+/*---------------------------------------------------------------------------*/
+void LapColor()
+{
+   COLOR_TYPE **Data1;
+   FLOAT_TYPE **Data2;
+   FLOAT_TYPE **Data3;
+   SHORT_TYPE **Data4;
+   int x, y;
+   float Rx, Gx, Bx, Ry, Gy, By;
+   float Rxx, Gxx, Bxx;
+   float Ryy, Gyy, Byy;
+
+   /* Read input image */
+   Data1 = (COLOR_TYPE **) im_alloc2D(Image1, COLOR);
+   im_read(Image1, COLOR, (char *) &(Data1[0][0]));
+
+   /* Create output image */
+   if (Zeros == TRUE)
+      Image2 = im_create(Name2, SHORT, Xdim, Ydim, 1);
+   else
+      Image2 = im_create(Name2, FLOAT, Xdim, Ydim, 1);
+   Data2 = (FLOAT_TYPE **) im_alloc2D(Image2, FLOAT);
+   Data3 = (FLOAT_TYPE **) im_alloc2D(Image2, FLOAT);
+   Data4 = (SHORT_TYPE **) im_alloc2D(Image2, SHORT);
+
+   /* Process image */
+   for (y = 1; y < (Ydim - 1); y++)
+      for (x = 1; x < (Xdim - 1); x++)
+      {
+         /* Use cubic splines to estimate derivatives */
+         Rx = W1 * Data1[y + 1][x + 1].r + W2 * Data1[y][x + 1].r
+            + W1 * Data1[y - 1][x + 1].r - W1 * Data1[y + 1][x - 1].r
+            - W2 * Data1[y][x - 1].r - W1 * Data1[y - 1][x - 1].r;
+
+         Gx = W1 * Data1[y + 1][x + 1].g + W2 * Data1[y][x + 1].g
+            + W1 * Data1[y - 1][x + 1].g - W1 * Data1[y + 1][x - 1].g
+            - W2 * Data1[y][x - 1].g - W1 * Data1[y - 1][x - 1].g;
+
+         Bx = W1 * Data1[y + 1][x + 1].b + W2 * Data1[y][x + 1].b
+            + W1 * Data1[y - 1][x + 1].b - W1 * Data1[y + 1][x - 1].b
+            - W2 * Data1[y][x - 1].b - W1 * Data1[y - 1][x - 1].b;
+
+         Ry = W1 * Data1[y + 1][x + 1].r + W2 * Data1[y + 1][x].r
+            + W1 * Data1[y + 1][x - 1].r - W1 * Data1[y - 1][x + 1].r
+            - W2 * Data1[y - 1][x].r - W1 * Data1[y - 1][x - 1].r;
+
+         Gy = W1 * Data1[y + 1][x + 1].g + W2 * Data1[y + 1][x].g
+            + W1 * Data1[y + 1][x - 1].g - W1 * Data1[y - 1][x + 1].g
+            - W2 * Data1[y - 1][x].g - W1 * Data1[y - 1][x - 1].g;
+
+         By = W1 * Data1[y + 1][x + 1].b + W2 * Data1[y + 1][x].b
+            + W1 * Data1[y + 1][x - 1].b - W1 * Data1[y - 1][x + 1].b
+            - W2 * Data1[y - 1][x].b - W1 * Data1[y - 1][x - 1].b;
+
+         Rxx = (Data1[y + 1][x + 1].r + 4.0 * Data1[y][x + 1].r
+                + Data1[y - 1][x + 1].r - 2.0 * Data1[y + 1][x].r
+                - 8.0 * Data1[y][x].r - 2.0 * Data1[y - 1][x].r
+                + Data1[y + 1][x - 1].r + 4.0 * Data1[y][x - 1].r
+                + Data1[y - 1][x - 1].r) / 6.0;
+
+         Gxx = (Data1[y + 1][x + 1].g + 4.0 * Data1[y][x + 1].g
+                + Data1[y - 1][x + 1].g - 2.0 * Data1[y + 1][x].g
+                - 8.0 * Data1[y][x].g - 2.0 * Data1[y - 1][x].g
+                + Data1[y + 1][x - 1].g + 4.0 * Data1[y][x - 1].g
+                + Data1[y - 1][x - 1].g) / 6.0;
+
+         Bxx = (Data1[y + 1][x + 1].b + 4.0 * Data1[y][x + 1].b
+                + Data1[y - 1][x + 1].b - 2.0 * Data1[y + 1][x].b
+                - 8.0 * Data1[y][x].b - 2.0 * Data1[y - 1][x].b
+                + Data1[y + 1][x - 1].b + 4.0 * Data1[y][x - 1].b
+                + Data1[y - 1][x - 1].b) / 6.0;
+
+         Ryy = (Data1[y + 1][x + 1].r - 2.0 * Data1[y][x + 1].r
+                + Data1[y - 1][x + 1].r + 4.0 * Data1[y + 1][x].r
+                - 8.0 * Data1[y][x].r + 4.0 * Data1[y - 1][x].r
+                + Data1[y + 1][x - 1].r - 2.0 * Data1[y][x - 1].r
+                + Data1[y - 1][x - 1].r) / 6;
+
+         Gyy = (Data1[y + 1][x + 1].g - 2.0 * Data1[y][x + 1].g
+                + Data1[y - 1][x + 1].g + 4.0 * Data1[y + 1][x].g
+                - 8.0 * Data1[y][x].g + 4.0 * Data1[y - 1][x].g
+                + Data1[y + 1][x - 1].g - 2.0 * Data1[y][x - 1].g
+                + Data1[y - 1][x - 1].g) / 6;
+
+         Byy = (Data1[y + 1][x + 1].b - 2.0 * Data1[y][x + 1].b
+                + Data1[y - 1][x + 1].b + 4.0 * Data1[y + 1][x].b
+                - 8.0 * Data1[y][x].b + 4.0 * Data1[y - 1][x].b
+                + Data1[y + 1][x - 1].b - 2.0 * Data1[y][x - 1].b
+                + Data1[y - 1][x - 1].b) / 6;
+
+         /* Calculate directional derivative */
+         Data3[y][x] = (float) sqrt((double)
+                                    (Rx * Rx + Gx * Gx + Bx * Bx +
+                                     Ry * Ry + Gy * Gy + By * By));
+         Data2[y][x] = Rxx + Ryy + Gxx + Gyy + Bxx + Byy;
+      }
+
+   /* Handle boundary rows and columns */
+   for (x = 0; x < Xdim; x++)
+   {
+      Data2[0][x] = Data2[1][x];
+      Data2[Ydim - 1][x] = Data2[Ydim - 2][x];
+   }
+   for (y = 0; y < Ydim; y++)
+   {
+      Data2[y][0] = Data2[y][1];
+      Data2[y][Xdim - 1] = Data2[y][Xdim - 2];
+   }
+
+   /* Write information to output image */
+   if (Zeros == TRUE)
+   {
+      ZeroCross(Data2, Data3, Data4);
+      im_write(Image2, SHORT, (char *) &(Data4[0][0]));
+   }
+   else
+      im_write(Image2, FLOAT, (char *) &(Data2[0][0]));
+   im_free2D((char **) Data1);
+   im_free2D((char **) Data2);
+   im_free2D((char **) Data3);
+   im_free2D((char **) Data4);
+}
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This is the main program.                                       */
+/*---------------------------------------------------------------------------*/
+int main(int argc, char *argv[])
+{
+   /* Program variables */
+   int i = 0;
+
+   /* Interpret program options */
+   printf("LAPLACIAN Program - KUIM Version 3.1\n\n");
+   while ((++i < argc) && (argv[i][0] == '-'))
+      switch (argv[i][1])
+      {
+      case 'd':
+         Debug = TRUE;
+         break;
+      case 'z':
+         Zeros = TRUE;
+         if (sscanf(argv[++i], "%f", &Thresh) == 0)
+            Error("Could not get threshold argument");
+         break;
+      default:
+         Error("Invalid option encountered");
+         break;
+      }
+
+   /* Check number of file names */
+   if (argc - i != 2)
+   {
+      fprintf(stderr, "Usage: laplacian [options] infile outfile\n");
+      fprintf(stderr, "       [-d]  Print debugging information\n");
+      fprintf(stderr, "       [-z #]  Zeros crossing threshold (10)\n");
+      exit(1);
+   }
+
+   /* Get image file names from argument list */
+   if (sscanf(argv[i++], "%s", Name1) == 0)
+      Error("Could not get input file name");
+   if (sscanf(argv[i++], "%s", Name2) == 0)
+      Error("Could not get output file name");
+
+   /* Process input image */
+   Image1 = im_open(Name1, &PixType, &Xdim, &Ydim, &Zdim, &DimCnt);
+
+   /* Handle color images */
+   if (PixType == COLOR || PixType == PSEUDO || PixType == JPEG_RGB)
+      LapColor();
+
+   /* Handle scalar images */
+   else if (DimCnt == 2)
+      LapScalar();
+
+   /* Handle vector images */
+   else if ((DimCnt == 3) && (Zdim == 3))
+      LapVector();
+
+   /* Unsupported image type */
+   else
+      Error("Can not process image");
+   return (0);
+}

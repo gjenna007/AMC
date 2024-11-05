@@ -1,0 +1,195 @@
+# KDE Config File
+scanbijhouder[index]=3;
+double som=0;
+double som=0;
+double som=0;
+double som=0;
+int overgangentotaal=0;
+if (scanbijhouder[positie]==0&&
+entropie=BerekenEntropie(coocmatrix);*/
+aantalpunten=Groeiregio(hor, ver, width, blurbeeld, scanbijhouder,venster);
+for (hor1=venster[0];hor1<=venster[1];hor1++){
+for (hor1=-range; hor1<=range; hor1++) {
+for (hor1=0;hor1<256;hor1++){
+for (hor1=0;hor1<256;hor1++){
+for (hor1=0;hor1<256;hor1++){
+for (hor1=0;hor1<256;hor1++){
+for (hor1=0;hor1<256;hor1++){
+for (hor1=venster[0];hor1<=venster[1];hor1++){
+for(v=venster[2];v<=venster[3];v++){
+int positiekern=hor1+width*ver1;
+for (hor2=-1;hor2<=1;hor2++){
+if(coocmatrix[hor1+256*ver1]!=0)
+venster[2]=topvenster;
+bottomvenster=nieuwbottomvenster;
+kleurpalethorver[0]=0;
+kleurpalethorver[0]=kleurpalethorver[0]+1;
+echtbeeld->rgb_data[index*3+1]=kleur[1]*255/kleurstap;
+som+=coocmatrix[hor1+256*ver1]/(1+(hor1-ver1)*(hor1-ver1));
+som+=(ver1-hor1)*(ver1-hor1)*coocmatrix[hor1+256*ver1];
+som+=coocmatrix[hor1+256*ver1]*coocmatrix[hor1+256*ver1];
+int grijsw1=echtbeeld->rgb_data[positiekern];
+scanbijhouder[positie]=1;
+dkleurpalet=Imlib_init(disp);
+blurbeeld[index]=echtbeeld->rgb_data[index*3];
+int  loop=0;
+blurbeeld[index]=som/(mask*mask);
+som +=echtbeeld->rgb_data[index*3+(hor1+ver1*width)*3];
+coocmatrix[grijsw1+256*grijsw2]=coocmatrix[grijsw1+256*grijsw2]+1;
+int grijsw2=echtbeeld->rgb_data[positiebuur];
+dsilhouet=Imlib_init(disp);
+if (kleurpalethorver[0]>=500/kleurpaletafmeting){
+som-=coocmatrix[hor1+256*ver1]*log(coocmatrix[hor1+256*ver1]);
+rrandvenster=nieuwrrandvenster;
+ver=range;
+nieuwbottomvenster=ver1+ver2;
+venster=malloc(4*sizeof(int));/*lrandvenster,rrandvenster,topvenster
+scanbijhouder[hor+(range-1)*width]=
+venster[0]=lrandvenster;
+/*invdiffmoment=BerekenInvdiffmoment(coocmatrix);
+resultaatbeeld->rgb_data[index]=gefilterdbeeld->rgb_data[index];
+if (kleurpalethorver[1]>=500/kleurpaletafmeting)
+range=mask/2;
+int index=(hor+width*ver);
+int index=hor+width*ver;
+kleurpalethorver=calloc(2,sizeof(int));/*Horizontaal,vertikaal*/
+dgefilterdbeeld=Imlib_init(disp);
+double mux,muy,sigmax,sigmay,som=0;
+if(scanbijhouder[hor+width*ver]!=0)
+0=nog niets mee gebeurd
+resultaatbeeld->rgb_data[index+1]=gefilterdbeeld->rgb_data[index];
+echtbeeld->rgb_data[index*3]=kleur[0]*255/kleurstap;
+uniformiteit=BerekenUniformiteit(coocmatrix);
+1=behoort tot groeigebied, moet nog
+if (scanbijhouder[index/3]==2){
+if (scanbijhouder[index/3]==2){
+if (scanbijhouder[index/3]==2){
+if (scanbijhouder[index/3]==2){
+int positie=hor1+hor2+width*(ver1+ver2);
+contrast=BerekenContrast(coocmatrix);
+2=behoort tot groeigebied, en is al
+kleurpalet->rgb_data[index*3+2]=kleur[2]*255/kleurstap;
+scanbijhouder[hor1+width*ver1]=3;
+int positiebuur=hor1+intersampling*thetax+width*(ver1-intersampling*thetay);
+scanbijhouder[hor1+width*ver1]=2;
+3=hoeft nooit meer bekeken te worden*/
+silhouet=Imlib_load_image(dsilhouet,"silhouetderuddere05.tif");/*Met de functie
+gefilterdbeeld=Imlib_load_image(dgefilterdbeeld,"deruddere03.tif");
+fpgebiedsgrootten=fopen("compgebiedsgrootten","w");
+kleur=calloc(3,sizeof(int));/* R,G,B */
+gefilterdbeeld->rgb_data[index]=resultaatbeeld->rgb_data[index]-1;
+gefilterdbeeld->rgb_data[index]=resultaatbeeld->rgb_data[index]+1;
+gefilterdbeeld->rgb_data[index]=resultaatbeeld->rgb_data[index]-1;
+gefilterdbeeld->rgb_data[index]=resultaatbeeld->rgb_data[index]+1;
+gefilterdbeeld->rgb_data[index]=gefilterdbeeld->rgb_data[index]-1;
+gefilterdbeeld->rgb_data[index]=resultaatbeeld->rgb_data[index]+1;
+gefilterdbeeld->rgb_data[index]=resultaatbeeld->rgb_data[index]-1;
+gefilterdbeeld->rgb_data[index]=resultaatbeeld->rgb_data[index]+1;
+kleur[1]=kleur[2]=0;
+kleur[1]=0;
+kleur[1]=kleur[1]+1;
+/* fpinvdiffmoment=fopen("invdiffmoment","w");
+for(hor=0;hor<width;hor++){
+for(hor=kleurpalethorver[0]*kleurpaletafmeting;
+if(silhouet->rgb_data[index*3]==0)
+for(hor=0;hor<width;hor++){
+if (scanbijhouder[positiekern]==2&&scanbijhouder[positiebuur]==2){
+venster[1]=rrandvenster;
+lrandvenster=nieuwlrandvenster;
+lrandvenster=rrandvenster=nieuwlrandvenster=nieuwrrandvenster=hor;
+disp=XOpenDisplay(NULL);
+if (scanbijhouder[hor1+width*ver1]==2)
+/*correlatie=BerekenCorrelatie(coocmatrix);*/
+scanbijhouder[range-1+width*ver]=
+scanbijhouder[hor+(height-range)*width]=3;
+scanbijhouder=calloc(width*height,sizeof(int));/*de waarden in scanbijhouder hebben
+b.v.  thetax=thetay=1 levert een hoek van 45 graden*/
+for (h=venster[0];h<=venster[1];h++){
+for (hor=venster[0];hor<=venster[1];hor++){
+for (hor=venster[0];hor<=venster[1];hor++){
+for (hor=venster[0];hor<=venster[1];hor++){
+for (hor=venster[0];hor<=venster[1];hor++){
+if (scanbijhouder[index]==2){
+scanbijhouder[width-range+ver*width]=3;
+for (hor=range-1;hor<=width-range;hor++){
+echtbeeld->rgb_data[index]=echtbeeld->rgb_data[index+1]=
+for (hor=0;hor<width;hor++){
+if (overgangentotaal!=0){
+for (hor=range;hor<width-range;hor++){
+width=echtbeeld->rgb_width;
+som=echtbeeld->rgb_data[index]+echtbeeld->rgb_data[index+1]+
+som=0;
+for(hor1=venster[0];hor1<=venster[1];hor1++){
+blurbeeld[hor+width*ver])<=tolerantie){
+for(hor1=lrandvenster;hor1<=rrandvenster;hor1++){
+index=hor+ver*width;
+index=(h+width*v)*3;
+index=(hor+ver*width)*3;
+index=(hor+ver*width)*3;
+index=(hor+ver*width)*3;
+index=(hor+ver*width)*3;
+index=hor+500*ver;
+index=hor1+width*ver1;
+index=hor+ver*width;
+hor=range;
+coocmatrix[hor1+256*ver1]=coocmatrix[hor1+256*ver1]/overgangentotaal;
+coocmatrix=calloc(256*256,sizeof(double));
+kleurpalethorver[1]=kleurpalethorver[1]+1;
+echtbeeld->rgb_data[index*3+2]=kleur[2]*255/kleurstap;
+filtersterkte=FilterKnop(contrast);
+kleur[0]=1;/*We willen het gebruik van grijs vermijden*/
+kleur[0]=0;
+kleur[0]=kleur[0]+1;
+dresultaatbeeld=Imlib_init(disp);
+fpcontrast=fopen("compacontrast","w");
+resultaatbeeld->rgb_data[index+2]=gefilterdbeeld->rgb_data[index];
+nieuwtopvenster=ver1+ver2;
+nieuwlrandvenster=hor1+hor2;
+scanbijhouder[hor+width*ver]=1;
+blurbeeld=calloc(width*height,sizeof(int));
+for (ver1=venster[2];ver1<=venster[3];ver1++){
+for(ver=0;ver<height;ver++){
+for (ver1=-range; ver1<=range; ver1++) {
+for (ver1=0;ver1<256;ver1++){
+for (ver1=0;ver1<256;ver1++){
+for (ver1=0;ver1<256;ver1++){
+for (ver1=0;ver1<256;ver1++){
+for (ver1=0;ver1<256;ver1++){
+for (ver1=venster[2];ver1<=venster[3];ver1++){
+nietsveranderd=0;
+for (ver1=topvenster;ver1<=bottomvenster;ver1++){
+nietsveranderd=1;
+venster[3]=bottomvenster;
+nieuwrrandvenster=hor1+hor2;
+kleurpalet=Imlib_load_image(dkleurpalet,"kleurpalet.tif");
+resultaatbeeld=Imlib_load_image(dresultaatbeeld,"deruddere03.tif");
+echtbeeld=Imlib_load_image(dechtbeeld,"compderuddere03.tif");
+kleur[2]=kleur[2]+1;
+while(nietsveranderd==0){
+height=echtbeeld->rgb_height;
+dechtbeeld=Imlib_init(disp);
+for (ver=0;ver<height;ver++){
+for (ver=venster[2];ver<=venster[3];ver++){
+for (ver=venster[2];ver<=venster[3];ver++){
+for (ver=venster[2];ver<=venster[3];ver++){
+for (ver=venster[2];ver<=venster[3];ver++){
+for (ver=kleurpalethorver[1]*kleurpaletafmeting;
+for (ver=range;ver<height-range;ver++){
+for (ver=0;ver<height;ver++){
+if(scanbijhouder[hor1+width*ver1]==1){
+int aantalpunten=0;
+int nietsveranderd=0;
+if (scanbijhouder[hor+width*ver]==0){
+for (ver=range;ver<height-range;ver++){
+kleurpaletafmeting=RibbeVakje();
+kleurpalet->rgb_data[index*3+1]=kleur[1]*255/kleurstap;
+kleurpalet->rgb_data[index*3]=kleur[0]*255/kleurstap;
+echtbeeld->rgb_data[index+2]=som/3;
+for(ver1=venster[2];ver1<=venster[3];ver1++){
+topvenster=nieuwtopvenster;
+for(ver2=-1;ver2<=1;ver2++){
+topvenster=bottomvenster=nieuwtopvenster=nieuwbottomvenster=ver;
+fpentropie=fopen("entropie","w");*/
+fpuniformiteit=fopen("compuniformiteit","w");
+[General]
+lfv_open_groups=
