@@ -1,0 +1,47 @@
+# Project: Postkantoor
+# Makefile created by Dev-C++ 5.4.1
+
+CPP      = g++.exe
+CC       = gcc.exe
+WINDRES  = windres.exe
+OBJ      = mainpost.o formulier.o klant.o rij.o klok.o lijst.o ambtenaar.o
+LINKOBJ  = mainpost.o formulier.o klant.o rij.o klok.o lijst.o ambtenaar.o
+LIBS     = -L"C:/Program Files (x86)/Dev-Cpp/MinGW64/x86_64-w64-mingw32/lib" -static-libgcc -std=c++11 -std=c++0x -g3
+INCS     = -I"C:/Program Files (x86)/Dev-Cpp/MinGW64/x86_64-w64-mingw32/include"
+CXXINCS  = -I"C:/Program Files (x86)/Dev-Cpp/MinGW64/x86_64-w64-mingw32/include"
+BIN      = Postkantoor.exe
+CXXFLAGS = $(CXXINCS) -g3
+CFLAGS   = $(INCS) -g3
+RM       = rm -f
+
+.PHONY: all all-before all-after clean clean-custom
+
+all: all-before $(BIN) all-after
+
+
+clean: clean-custom
+	${RM} $(OBJ) $(BIN)
+
+$(BIN): $(OBJ)
+	$(CPP) $(LINKOBJ) -o $(BIN) $(LIBS)
+
+mainpost.o: mainpost.cpp
+	$(CPP) -c mainpost.cpp -o mainpost.o $(CXXFLAGS)
+
+formulier.o: formulier.cpp
+	$(CPP) -c formulier.cpp -o formulier.o $(CXXFLAGS)
+
+klant.o: klant.cpp
+	$(CPP) -c klant.cpp -o klant.o $(CXXFLAGS)
+
+rij.o: rij.cpp
+	$(CPP) -c rij.cpp -o rij.o $(CXXFLAGS)
+
+klok.o: klok.cpp
+	$(CPP) -c klok.cpp -o klok.o $(CXXFLAGS)
+
+lijst.o: lijst.cpp
+	$(CPP) -c lijst.cpp -o lijst.o $(CXXFLAGS)
+
+ambtenaar.o: ambtenaar.cpp
+	$(CPP) -c ambtenaar.cpp -o ambtenaar.o $(CXXFLAGS)

@@ -1,0 +1,87 @@
+Automatic Delineation of Body Contours on Cone-Beam CT Images
+Gjenna Stippel, Dominique C. van Rooijen, Arjan Bel 
+Department of Radiation Oncology, Academic Medical Center, Amsterdam, The Netherlands
+Abstract
+Aim of this study is to develop an accurate automatic segmentation of the body contour on CBCT images. The first step was edge detection using a Sobel operator to find the table and distinguish that from the body. Secondly, histogram peaks of the pixel values corresponding to body and background were determined. The average of these values was used as threshold for determining the outer edge of the body and a binary image was created. The largest object was considered as body and was filled using region growing. With a Sobel operator edges were determined. Finally the endpoints of the obtained line pieces were connected; artefacts were removed by considering only pixels that are close to the original segmented body object. The result is a correct body outline, suitable for on-line dose calculation. In conclusion, the proposed method is reliable.
+Keywords
+CBCT, automatic segmentation, on-line dose calculation
+
+
+Introduction
+Recently the kilovoltage conebeam-CT (CBCT) became widely available in the radiotherapy clinic [1]. The introduction of CBCT enabled stereotactic body radiation therapy (SBRT) for stage I/II lung cancer patients, because of the good target visibility. 
+      A major risk in SBRT for lung tumours is the interfraction variation of the tumour position with respect to the organs at risk (OARs) [2,3]. Considering the high fraction dose in SBRT an overdosage in an OAR may lead to serious complications. To prevent overdosage in OARs margins are used around these structures. This margin indicates the volume where the dose does not exceed the limit. 
+      In cases where the movement of the tumour exceeds this margin, the physician has to make a decision about how to proceed. It would be easier to make a decision if the actual dose distribution in that situation would be available. The calculation of this dose distribution should be fast and accurate. 
+      Our home-made real-time planning system APlan can import the CBCT and this system is optimized for fast dose distribution on the GPU [4,5]. The Hounsfield units (HUs) of the CBCT are known to be inaccurate, but several groups have presented solutions for that [6,7]. In any case, for a dose calculation a body contour is also necessary to distinguish the patient from the surrounding air and/or probable reconstruction artefacts. The algorithms for body contour segmentation on regular CT fail on the CBCT and because we want to perform an on-line dose calculation manual segmentation is too time-consuming. 
+      In this study we present a method for fast and accurate segmentation of the body contour, which makes on-line dose calculation feasible.
+ 
+Material and methods
+For this work we used 48 CBCT scans of lung cancer patients previously treated in our department. The CBCTs were acquired with the Synergy system (Elekta, Crawley, United Kingdom) and registered with XVI release 3.5 (Elektra, Crawley, United Kingdom). All CBCT scans were made using the same scan protocol: M20 collimator, 360o scan, 120 kV and a bow-tie filter was used. 38 Scans consisted of 264 slices, 10 scans consisted of 120 slices. [R1]
+
+      
+      As a first step, we determine the location of the table top in the images. Since the table at which the patient is lying is horizontal, this position is virtually[R2] the same in all slices. Exploiting this fact, we employ the following procedure to determine location of the table top. 
+      We first select all slices for which the diameter of the scanning circle covers the full width of the image (i.e., 410 pixels in our experiments). [R3]A mask of the scanning circle in any image $Z$ is constructed by defining a matrix $Z_{mask}$ that has the same dimensions as $Z$. After determining the average value $\mu$ of the first 100 pixels in the top left corner of $Z$, we can fill $Z_{mask}$ with ones on all positions where the pixels in $Z$ have a grey value higher than $\mu$, and with zeros everywhere else. Now, if the sum of the pixels of the third row of $Z_{mask}$ is greater than zero, then we can conclude that in this slice the mask covers the full width of the image, and hence the image must be included in the procedure to determine location of the table top. 
+      We perform edge detection with a Sobel operator on all the selected images. The table top shows up as a large horizontal edge over nearly the entire width of all these images accordingly. See Figure 1 for an example of this. Summing the thus obtained binary edge images gives a matrix $M.$ Summing the elements of $M$ in the horizontal direction results in vector v with a peak value at a place ?? corresponding to the table top. Figure 2 is a plot of $v$, where $v$ is a vector obtained by the above described summation process.
+	The images in which the diameter of the scanning circle is smaller than the full width of the image, and which are consequently excluded from further processing, are the first and last few slices of the scan. Those few images have a very limited field of view and therefore contain too little image data to make automatic interpretation feasible. In practice, the region of interest, i.e., the tissue that needs radiation treatment is not located in these slices. [R4]
+      
+
+
+      Secondly, for each selected 2D image a histogram H of 10 bins is made of the pixel values of all pixels inside the scanning circle of the image. Furthermore, extremely high values are being replaced by an upper threshold $\tau$. We used for $\tau$ the mean of all pixel values considered plus 2.5 times their standard deviation. This is in accordance with the general statistical definition of an outlier in a data set. As a result, we obtain a histogram that is usually bimodal. In some uncommon cases, when the lung covers a large part of the image, the first bin is also high, providing $H$ with a third peak. 
+      Now, let $\nu$ be the average of the 10 centre values of all bins of $H$. Call the pixel value corresponding to the centre of the bin of the highest peak of $H$ which is greater than $\nu ,p_{\mbox{body}}$ and that corresponding to the highest peak of $H$ which is less than $\nu, $p_{\mbox{backg}}.$ The average $\Gamma = \frac{p_{\mbox{body}}+p_{\mbox{backg}}}{2}$ serves as a threshold value that will be used in step 3 of the algorithm. We employ the average of the two peak centres rather than the minimum of $H$ between $p_{\mbox{body}}$ and $p_{\mbox{backg}},$ because taking the average is more robust. [R5]Due to the occasional presence of a third peak, as explained above, the location of the absolute minimum of $H$ might differ significantly between two consecutive slices, which would produce a very different outcome of step 3 of the algorithm for successive slices.[R6]
+      Finally, the part of the image below the tabletop position $\lambda$ is filled with zeros, since the body of the patient is located on top of the table and hence the  region below $\lambda$ must be excluded from  delineation. We denote the thus obtained image by $\Sigma .$
+      In the third step, we threshold image $\Sigma$ at value $\Gamma ,$ resulting in a binary image containing one or more connected components, among which the patient body. We fill up the islands enclosed by these components by first determining the outer region $\Omega$ utilizing a region growing procedure that starts at the top left pixel of the image, after which we take the complement of $\Omega .$ We pick the largest component in the resulting binary image (i.e., the one consisting of the most pixels). The collection of its exterior pixels forms our initial outer contour $\Lambda .$
+      As a fourth step, we process the image $\Sigma$ with a Sobel operator and obtain the edge image $\Theta .$ [R7]In the sequel, we only consider edges in $\Theta$ that cross (i.e., have at least one pixel in common with) the contour $\Lambda$ and contain pixels of the region inside $\Lambda .$?We then find the endpoints of these edges of $\Theta$ with the following procedure: Start at a pixel $p_0$ where an edge crosses $\Lambda$ and scan the pixels adjacent to $p_0$ in clockwise order, starting at the top left adjacent pixel, as represented in Figure $\ref$. [R8]If the pixel under consideration also belongs to $\Theta ,$ then this pixel becomes the new $p_0 .$ Subsequently, its adjacent pixels are scanned, etcetera. Proceeding like this, we "walk" over the edge of $\Theta .$ At some point, we will not find any new adjacent pixels that belong to $\Theta$ anymore. We then identify the pixel under consideration as being a terminus and continue to the next element of $\Theta .$ Eventually, each terminus is connected through a straight line with either a second terminus or with a point of $\Lambda ,$?whichever is most nearby. All pixels, except the innermost ones, are removed. This way, the parts of $\Lambda$ that are too far from the edge of the body are replaced by an element of $\Theta ,$ i.e., an edge that is detected by the Sobel operator.
+
+Results and discussion
+In Figure 3, the outer contour $\Lambda$ after applying these first three processing steps is shown. As can be seen, the delineation is still deteriorated at this stage by streak artefacts common in CBCT images. 
+
+
+
+	After the final imaging process step a correct outer body contour is segmented, which does not include the table top or streak artefacts (figure 4). The result of the method on a second image is shown in figure 5. 
+
+To evaluate the algorithm quantitatively, we asked two experts to delineate the body in a set of scans that was made available to them. We asked them to only use the slices that are well-interpretable, i.e., not the first or the last ones for which the field of view is too limited to be used in a realistic diagnosis. Furthermore, they only delineated the evenly numbered slices, since successive slices usually differ very little, and we wanted to delineate more different patients instead. One expert processed 48 scans, the other 10 scans.  Besides, we processed all scans automatically with our novel method and compared the results quantitatively with the expert delineations.
+For the purpose of this validation, we used two similarity measures: the Jaccard index, and the Dice coefficient. 
+For two region A and B the Jaccard index J is defined as  $J=\frac{|A\cap B|}{|A\cup B|}.$ The Dice coefficient D is defined as $D=\frac{2|A\cap B|}{|A|+|B|}.$
+In table 1, we see the results for the three pairs (expert1, expert2),  (expert1, algorithm), (expert2, algorithm). For the pair (expert2, algorithm), we have two sets of results: one for the same 10 scans as have been delineated by expert1, and one for the algorithms performance compared to all 48 scans that have been processed by expert 2. For both parameters the mean value and the standard deviation of the set of results for that pair are shown. 
+The first conclusion we can draw is that the experts agree  well on the 10 scans that are processed by both of them. Furthermore, we see that our method performs comparable to either expert on those 10 scans.
+When we calculate the performance of the algorithm on the complete set of 48 images, and compare that with the expert who processed those, we see that the algorithm agrees significantly better with the expert than the experts agree among each other.[R9]
+
+Mean of Jaccard IndexStddev of Jaccard IdexMean of Dice coefficientStddev of Dice coefficientexp1v.exp20.98530.08880.98870.0875alg v. exp10.96190.09570.97650.0866alg v. exp20.95550.12640.96970.1196alg v. exp2 (48 scans)0.98580.00240.99280.0012
+	 
+  
+
+
+Figure 4: Final result
+
+
+
+Figure 5: Final result
+
+	 
+
+Conclusion
+Delineation of the body contour is an important step for making on-line dose calculation and on-line replanning feasible. We introduced a novel technique to delineate the outer contour of a body on a CBCT image that is used for external beam therapy. 
+
+Acknowledgements
+Hier Marlinde van Dijk en Donald Pool bedanken voor hun bijdrage aan deze studie. 
+
+References
+[1]  Jaffray DA, Siewerdesen JH, Wong JW and Martinez AA 2002 Flat-panel cone-beam computed tomography for image-guided radiation therapy Int J Radiat Oncol Biol Phys  53 1337-1349
+[2]  Sonke JJ, Lebesque J and van Herk M 2008 Variability of four-dimensional computed tomography patient models Int J Radiat Oncol Biol Phys  70 590-598
+[3]  Sonke JJ, Rossi M, Wolthaus J et al. 2009 Frameless stereotactic body radiotherapy for lung cancer using four-dimensional cone beam CT guidance Int J Radiat Oncol Biol Phys  74 567-574
+[4]    Bel A, van Rooijen DC, Kamphuis M and Pool R 2008 APlan: A 4D treatment planning evaluation program  Radiother Oncol 88 S365
+[5]    de Greef M, Crezee J, van Eijk JC, Pool R, Bel A 2009 Accelerated ray-tracing for radiotherapy dose calculations on a GPU Med Phys 36 4095-4102
+[6]  Richter, A, Hu Q, Steglich D et al. 2008 Investigation of the usability of conebeam CT data sets for dose calculation Radiat Oncol 3 42
+[7]   Guan H, Dong H 2009Dose calculation accuracy using cone-beam CT (CBCT) for pelvic adaptive radiotherapy Phys Med Biol 54 6239-6250
+
+[R1]de scans met 120 slices zijn gemaakt met collimator M10
+[R2]waarom 'virtually the same' en niet gewoon 'the same'. Misschien dan ook iets zeggen over dat de tafel kan doorbuigen. 
+[R3]Dit is denk ik niet erg duidelijk. Een plaatje maakt duidelijker wat je met de scanning circle bedoelt en wanneer die de 'full width' heeft.
+[R4]Als je dit stukje wat naar voren haalt wordt de rest wat duidelijker. Ook plaatje erbij.
+[R5]Discussie?
+[R6]Waarom doe je dit per slice en niet in 1 keer voor de hele dataset? Dat zou toch veel robuuster zijn?
+[R7]In stap 1 heb je toch ook alle images al met die Sobel edge detector gedaan. Kan je dat resultaat niet recyclen?
+[R8]Waar is deze figuur? 
+[R9]Ik weet niet of je deze conclusie kunt trekken. Bij die eerste 10 scans die ze allebei gedaan hebben is exp1 vs exp2 beter dan alg v. exp1 en alg v. exp2. Ik denk dat het beeld vertekend is doordat het om 5 keer zo veel scans gaat bij de laatste rij. Bij de eerste 3 rijen lijkt het erop dat de resultaten niet normaal verdeeld zijn en je dus eigenlijk geen mean en SD mag gebruiken om de resultaten te omschrijven. 
+
+Proceedings of the XVIth ICCR
+
