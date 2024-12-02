@@ -1,0 +1,199 @@
+function cardetector2(BEELDSTART,STEP,BEELDEIND)                                                                                                                           
+Tg1=15;T2=230;Tk1=10;RAND=5;%FORMER=.82;NOW=.82;
+%BEELDSTART=4724;BEELDEIND=4744;
+MASKSTART=1;MASKEIND=200;
+MASKAVAILABLE=1;%0 als er nog geen mask is, 1 als er al een mask is
+BLOBSAVAILABLE=0;
+MINPERC=.45;
+MINOVERLAP=.25;
+cd images
+backg=imread(['Frame' num2str(BEELDSTART) '.bmp']);
+cd ..
+%roadpixels=zeros(256,256,256);
+se=strel('disk',RAND);
+se2=strel('disk',30);
+initchance = zeros(size(backg,1),size(backg,2));
+
+if MASKAVAILABLE==0%Dit stuk alleen maar uitvoeren als er nog een mask gemaakt moet worden
+cd results
+for beeld=MASKSTART:MASKEIND
+    [beeld MASKEIND]
+    cd ../images
+    backg=imread(['Frame' num2str(beeld) '.bmp']);
+    cd ../results
+    avgim=double(sum(backg,3))/3;
+    dbackg1=double(backg(:,:,1));
+    dbackg2=double(backg(:,:,2));
+    dbackg3=double(backg(:,:,3));
+    road=abs(avgim-dbackg1)<Tg1&abs(avgim-dbackg2)<Tg1&abs(avgim-dbackg3)<Tg1&avgim<T2&avgim>40;
+    figure, imshow(road,[])
+    fillroad=imfill(road,'holes');
+    figure, imshow(fillroad,[])
+    newcars=fillroad&(~road);
+    figure, imshow(newcars,[])
+    localregioncount=bwlabel(newcars);
+    cars2 = zeros(size(backg,1),size(backg,2));
+    max(localregioncount(:))
+    for teller=1:max(localregioncount(:))
+        %if mod(teller,100)==0
+        %    teller
+        %end
+        singleblob=(localregioncount==teller);
+        if sum(singleblob(:))>40
+            localregion=imdilate(singleblob,se)&(localregioncount==0);%andere punten in de buurt van singleblob moeten ook uitgesloten worden
+            if median(abs(avgim(localregion)-dbackg1(localregion)))<Tk1&&median(abs(avgim(localregion)-dbackg2(localregion)))<Tk1&&median(abs(avgim(localregion)-dbackg3(localregion)))<Tk1
+                cars2=cars2|singleblob;
+            end
+        end
+    end
+    %save(['cars' num2str(beeld)],'cars2')
+    cars2=imdilate(cars2, se2);
+    initchance=initchance+double(cars2);   
+end
+%save(['sumblobs' num2str(MASKSTART) '-' num2str(MASKEIND)],'initchance');
+cd ..
+end%MASKAVAILABLE SWITCH
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+if (MASKAVAILABLE==1 && BLOBSAVAILABLE==1)
+cd results
+load(['sumblobs' num2str(MASKSTART) '-' num2str(MASKEIND) '.mat'])
+mask=initchance>MINPERC*(MASKEIND-MASKSTART+1);
+for beeld=BEELDSTART:STEP:BEELDEIND
+    [beeld BEELDEIND BEELDSTART]
+    load(['cars' num2str(beeld) '.mat'])
+    blobnummers=bwlabel(cars2);
+    cd ../images
+    orig=imread(['Frame' num2str(beeld) '.bmp']);
+    cd ../results
+    for bn=1:max(blobnummers(:))
+        singleblob=blobnummers==bn;
+        if (sum(singleblob(:)))>40
+            ver=sum(singleblob,2);
+            hor=sum(singleblob,1);
+            top=find(ver,1,'first');
+            bottom=find(ver,1,'last');
+            left=find(hor,1,'first');
+            right=find(hor,1,'last');
+            if ~(bottom-top<4 || (right-left)>6*(bottom-top))
+                if sum(singleblob(:))>.20*(right-left)*(bottom-top)
+                overlap=mask&singleblob;%hier wordt de mask gebruikt
+               % ['A' num2str(sum(overlap(:)))]
+                    if sum(overlap(:))<MINOVERLAP*sum(singleblob(:))
+                        %['B' num2str(sum(singleblob(:))) num2str(beeld)]
+                    b1=orig(:,:,1);
+                    b2=orig(:,:,2);
+                    b3=orig(:,:,3);
+                    ttop=max(1,top-1);bbottom=min(size(cars2,1),bottom+1);
+                    lleft=max(1,left-1);rright=min(size(cars2,2),right+1);
+                    b1(ttop:bbottom,lleft:left)=255;
+                    b1(ttop:bbottom,right:rright)=255;
+                    b1(ttop:top,lleft:rright)=255;
+                    b1(bottom:bbottom,lleft:rright)=255;
+                    b2(ttop:bbottom,lleft:left)=0;
+                    b2(ttop:bbottom,right:rright)=0;
+                    b2(ttop:top,lleft:rright)=0;
+                    b2(bottom:bbottom,lleft:rright)=0;
+                    b3(ttop:bbottom,lleft:left)=0;
+                    b3(ttop:bbottom,right:rright)=0;
+                    b3(ttop:top,lleft:rright)=0;
+                    b3(bottom:bbottom,lleft:rright)=0;
+                    orig(:,:,1)=b1;
+                    orig(:,:,2)=b2;
+                    orig(:,:,3)=b3;
+                    end
+                end
+            end
+        end
+    end
+    %orig=min(255,orig);
+    %orig=uint8(max(0,orig));
+    name=['0000' num2str(beeld)];
+    imwrite(orig,[name(length(name)-4:length(name)) '.bmp'],'bmp')
+end
+cd ..
+end%i
+
+
+if (MASKAVAILABLE==1 &&  BLOBSAVAILABLE==0)
+cd results
+load(['sumblobs' num2str(MASKSTART) '-' num2str(MASKEIND) '.mat'])
+mask=initchance>MINPERC*(MASKEIND-MASKSTART+1);
+for beeld=BEELDSTART:STEP:BEELDEIND
+    [beeld BEELDEIND BEELDSTART]
+    cd ../images
+    backg=imread(['Frame' num2str(beeld) '.bmp']);
+    cd ../results
+    avgim=double(sum(backg,3))/3;
+    dbackg1=double(backg(:,:,1));
+    dbackg2=double(backg(:,:,2));
+    dbackg3=double(backg(:,:,3));
+    road=abs(avgim-dbackg1)<Tg1&abs(avgim-dbackg2)<Tg1&abs(avgim-dbackg3)<Tg1&avgim<T2&avgim>40;
+    figure,imshow(road,[])
+    fillroad=imfill(road,'holes');
+    figure,imshow(fillroad,[])
+    newcars=fillroad&(~road);
+    figure,imshow(newcars,[])
+    localregioncount=bwlabel(newcars);
+    cars2 = zeros(size(backg,1),size(backg,2));
+    max(localregioncount(:))
+    b1=backg(:,:,1);
+    b2=backg(:,:,2);
+    b3=backg(:,:,3);
+    for teller=1:max(localregioncount(:))
+        %if mod(teller,100)==0
+        %    teller
+        %end
+        singleblob=(localregioncount==teller);
+        if sum(singleblob(:))>40
+            localregion=imdilate(singleblob,se)&(localregioncount==0);%andere punten in de buurt van singleblob moeten ook uitgesloten worden
+            if median(abs(avgim(localregion)-dbackg1(localregion)))<Tk1&&median(abs(avgim(localregion)-dbackg2(localregion)))<Tk1&&median(abs(avgim(localregion)-dbackg3(localregion)))<Tk1
+                ver=sum(singleblob,2);
+                hor=sum(singleblob,1);
+                top=find(ver,1,'first');
+                bottom=find(ver,1,'last');
+                left=find(hor,1,'first');
+                right=find(hor,1,'last');
+                if ~(bottom-top<4 || (right-left)>6*(bottom-top))
+                    if sum(singleblob(:))>.20*(right-left)*(bottom-top)
+                        cars2=cars2|singleblob;
+                    overlap=mask&singleblob;%hier wordt de mask gebruikt
+                        if sum(overlap(:))<MINOVERLAP*sum(singleblob(:))
+                        ttop=max(1,top-1);bbottom=min(size(b1,1),bottom+1);
+                        lleft=max(1,left-1);rright=min(size(b1,2),right+1);
+                        b1(ttop:bbottom,lleft:left)=255;
+                        b1(ttop:bbottom,right:rright)=255;
+                        b1(ttop:top,lleft:rright)=255;
+                        b1(bottom:bbottom,lleft:rright)=255;
+                        b2(ttop:bbottom,lleft:left)=0;
+                        b2(ttop:bbottom,right:rright)=0;
+                        b2(ttop:top,lleft:rright)=0;
+                        b2(bottom:bbottom,lleft:rright)=0;
+                        b3(ttop:bbottom,lleft:left)=0;
+                        b3(ttop:bbottom,right:rright)=0;
+                        b3(ttop:top,lleft:rright)=0;
+                        b3(bottom:bbottom,lleft:rright)=0;
+                        end                                                                                                                             
+                    end
+                end
+            end
+        end
+    end
+    backg(:,:,1)=b1;
+    backg(:,:,2)=b2;
+    backg(:,:,3)=b3;
+    %save(['cars' num2str(beeld)],'cars2')
+    backg=min(255,backg);
+    backg=uint8(max(0,backg));
+    name=['0000' num2str(beeld)];
+    %imwrite(backg,[name(length(name)-4:length(name)) '.bmp'],'bmp')
+end
+cd ..
+end%if MASKEIND<BEELDEIND
+%function findSum(inputvalue)
+%persistent SUM_X
+
+%if isempty(SUM_X)
+%   SUM_X = 0;
+%end
+%SUM_X = SUM_X + inputvalue

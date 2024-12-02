@@ -1,0 +1,322 @@
+/*---------------------------------------------------------------------------*/
+/* Program:  blob_color.c                                                    */
+/*                                                                           */
+/* Purpose:  This program scans a b/w image in KUIM format and generates     */
+/*           a blob_colored image.  A recursive algorithm is used.           */
+/*                                                                           */
+/* Author:   John Gauch                                                      */
+/*                                                                           */
+/* Date:     March 30, 1994   - Original program.                            */
+/* Date:     November 3, 1994 - Added 3D support.                            */
+/* Date:     January 27, 1997 - Added small blob removal.                    */
+/*                                                                           */
+/* Note:     Copyright (C) The University of Kansas, 1994-1997               */
+/*---------------------------------------------------------------------------*/
+#include <IM.h>
+#define MAX_SIZE 200000
+
+/* Global program variables */
+SHORT_TYPE **data1;
+SHORT_TYPE **data2;
+SHORT_TYPE ***Data1;
+SHORT_TYPE ***Data2;
+int Xdim, Ydim, Zdim;
+int Output = 8;
+int Color = 1;
+int Size = 0;
+float MeanX, MeanY, MeanZ;
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This routine marks 2D blobs.                                    */
+/*---------------------------------------------------------------------------*/
+void BlobColor2D(int x, int y, int c)
+{
+   if ((data1[y][x] == 1) && (Size < MAX_SIZE))
+   {
+      data1[y][x] = 0;
+      data2[y][x] = c;
+      MeanX += x;
+      MeanY += y;
+      Size++;
+      if (x + 1 < Xdim)
+         BlobColor2D(x + 1, y, c);
+      if (x > 0)
+         BlobColor2D(x - 1, y, c);
+      if (y + 1 < Ydim)
+         BlobColor2D(x, y + 1, c);
+      if (y > 0)
+         BlobColor2D(x, y - 1, c);
+      if (Output == 4)
+         return;
+      if ((x + 1 < Xdim) && (y + 1 < Ydim))
+         BlobColor2D(x + 1, y + 1, c);
+      if ((x > 0) && (y + 1 < Ydim))
+         BlobColor2D(x - 1, y + 1, c);
+      if ((x + 1 < Xdim) && (y > 0))
+         BlobColor2D(x + 1, y - 1, c);
+      if ((x > 0) && (y > 0))
+         BlobColor2D(x - 1, y - 1, c);
+   }
+}
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This routine erases 2D blobs.                                   */
+/*---------------------------------------------------------------------------*/
+void BlobErase2D(int x, int y, int c)
+{
+   if ((data2[y][x] == c) && (Size < MAX_SIZE))
+   {
+      data1[y][x] = 0;
+      data2[y][x] = 0;
+      if (x + 1 < Xdim)
+         BlobErase2D(x + 1, y, c);
+      if (x > 0)
+         BlobErase2D(x - 1, y, c);
+      if (y + 1 < Ydim)
+         BlobErase2D(x, y + 1, c);
+      if (y > 0)
+         BlobErase2D(x, y - 1, c);
+      if (Output == 4)
+         return;
+      if ((x + 1 < Xdim) && (y + 1 < Ydim))
+         BlobErase2D(x + 1, y + 1, c);
+      if ((x > 0) && (y + 1 < Ydim))
+         BlobErase2D(x - 1, y + 1, c);
+      if ((x + 1 < Xdim) && (y > 0))
+         BlobErase2D(x + 1, y - 1, c);
+      if ((x > 0) && (y > 0))
+         BlobErase2D(x - 1, y - 1, c);
+   }
+}
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This routine marks 3D blobs.                                    */
+/*---------------------------------------------------------------------------*/
+void BlobColor3D(int x, int y, int z, int c)
+{
+   if ((Data1[z][y][x] == 1) && (Size < MAX_SIZE))
+   {
+      Data1[z][y][x] = 0;
+      Data2[z][y][x] = Color;
+      MeanX += x;
+      MeanY += y;
+      MeanZ += z;
+      Size++;
+      if (x + 1 < Xdim)
+         BlobColor3D(x + 1, y, z, c);
+      if (x > 0)
+         BlobColor3D(x - 1, y, z, c);
+      if (y + 1 < Ydim)
+         BlobColor3D(x, y + 1, z, c);
+      if (y > 0)
+         BlobColor3D(x, y - 1, z, c);
+      if (z + 1 < Zdim)
+         BlobColor3D(x, y, z + 1, c);
+      if (z > 0)
+         BlobColor3D(x, y, z - 1, c);
+   }
+}
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This routine erases 3D blobs.                                   */
+/*---------------------------------------------------------------------------*/
+void BlobErase3D(int x, int y, int z, int c)
+{
+   if ((Data2[z][y][x] == c) && (Size < MAX_SIZE))
+   {
+      Data1[z][y][x] = 0;
+      Data2[z][y][x] = 0;
+      if (x + 1 < Xdim)
+         BlobErase3D(x + 1, y, z, c);
+      if (x > 0)
+         BlobErase3D(x - 1, y, z, c);
+      if (y + 1 < Ydim)
+         BlobErase3D(x, y + 1, z, c);
+      if (y > 0)
+         BlobErase3D(x, y - 1, z, c);
+      if (z + 1 < Zdim)
+         BlobErase3D(x, y, z + 1, c);
+      if (z > 0)
+         BlobErase3D(x, y, z - 1, c);
+   }
+}
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This is the main program.                                       */
+/*---------------------------------------------------------------------------*/
+int main(int argc, char *argv[])
+{
+   /* Image variables */
+   char Name1[50];
+   char Name2[50];
+   IM_TYPE *Image1;
+   IM_TYPE *Image2;
+   int PixType, DimCnt;
+
+   /* Program variables */
+   int Debug = FALSE;
+   int Reverse = FALSE;
+   int MinSize = 10;
+   int MaxSize = 100000;
+   int i = 0, x, y, z;
+
+   /* Interpret program options */
+   printf("BLOB_COLOR Program - KUIM Version 2.0\n\n");
+   while ((++i < argc) && (argv[i][0] == '-'))
+      switch (argv[i][1])
+      {
+      case 't':
+         if (sscanf(argv[++i], "%d", &MinSize) == 0)
+            Error("Could not get integer argument");
+         break;
+      case 'T':
+         if (sscanf(argv[++i], "%d", &MaxSize) == 0)
+            Error("Could not get integer argument");
+         break;
+      case 'r':
+         Reverse = TRUE;
+         break;
+      case '4':
+         Output = 4;
+         break;
+      case '8':
+         Output = 8;
+         break;
+      case 'd':
+         Debug = TRUE;
+         break;
+      default:
+         Error("Invalid option encountered");
+         break;
+      }
+
+   /* Check number of file names */
+   if (argc - i != 2)
+   {
+      fprintf(stderr, "Usage: blob_color [options] infile outfile\n");
+      fprintf(stderr, "       [-t #]  Minimum blob size (10)\n");
+      fprintf(stderr, "       [-T #]  Maximum blob size (100000)\n");
+      fprintf(stderr, "       [-d]  Print debugging information\n");
+      fprintf(stderr, "       [-r]  Reverse 0/1 before blob coloring\n");
+      fprintf(stderr, "       [-4]  Find 4 connected blobs\n");
+      fprintf(stderr, "       [-8]  Find 8 connected blobs\n");
+      exit(1);
+   }
+
+   /* Get image file names from argument list */
+   if (sscanf(argv[i++], "%s", Name1) == 0)
+      Error("Could not get input file name");
+   if (sscanf(argv[i++], "%s", Name2) == 0)
+      Error("Could not get output file name");
+
+   /* Open input image */
+   Image1 = im_open(Name1, &PixType, &Xdim, &Ydim, &Zdim, &DimCnt);
+   if (DimCnt == 1)
+      Error("Can not process 1D images");
+
+   /* Handle 2D images */
+   else if (DimCnt == 2)
+   {
+      data1 = (SHORT_TYPE **) im_alloc2D(Image1, SHORT);
+      im_read(Image1, SHORT, (char *) &(data1[0][0]));
+
+      /* Create output image */
+      Image2 = im_create(Name2, SHORT, Xdim, Ydim, Zdim);
+      data2 = (SHORT_TYPE **) im_alloc2D(Image2, SHORT);
+
+      /* Preprocess the image */
+      for (y = 0; y < Ydim; y++)
+         for (x = 0; x < Xdim; x++)
+         {
+            if (data1[y][x] > 1)
+               data1[y][x] = 1;
+            if (data1[y][x] < 0)
+               data1[y][x] = 0;
+            if (Reverse == TRUE)
+               data1[y][x] = 1 - data1[y][x];
+            data2[y][x] = 0;
+         }
+
+      /* Mark the blobs in the input image */
+      for (y = 0; y < Ydim; y++)
+         for (x = 0; x < Xdim; x++)
+            if (data1[y][x] == 1)
+            {
+               MeanX = MeanY = 0.0;
+               Size = 0;
+               BlobColor2D(x, y, Color);
+               if ((Size < MinSize) || (Size > MaxSize))
+                  BlobErase2D(x, y, Color);
+               else
+               {
+                  MeanX /= Size;
+                  MeanY /= Size;
+                  if (Debug == TRUE)
+                     printf("blob %4d size %4d pos %5d %5d\n",
+                     Color, Size, (int) (0.5 + MeanX), (int) (0.5 + MeanY));
+                  Color++;
+               }
+            }
+
+      /* Write information to output image */
+      im_write(Image2, SHORT, (char *) &(data2[0][0]));
+      im_free2D((char **) data1);
+      im_free2D((char **) data2);
+   }
+
+   /* Handle 3D images */
+   else if (DimCnt == 3)
+   {
+      /* Read input image */
+      Data1 = (SHORT_TYPE ***) im_alloc3D(Image1, SHORT);
+      im_read(Image1, SHORT, (char *) &(Data1[0][0][0]));
+
+      /* Create output image */
+      Image2 = im_create(Name2, SHORT, Xdim, Ydim, Zdim);
+      Data2 = (SHORT_TYPE ***) im_alloc3D(Image2, SHORT);
+
+      /* Preprocess the image */
+      for (z = 0; z < Zdim; z++)
+         for (y = 0; y < Ydim; y++)
+            for (x = 0; x < Xdim; x++)
+            {
+               if (Data1[z][y][x] > 1)
+                  Data1[z][y][x] = 1;
+               if (Data1[z][y][x] < 0)
+                  Data1[z][y][x] = 0;
+               if (Reverse == TRUE)
+                  Data1[z][y][x] = 1 - Data1[z][y][x];
+               Data2[z][y][x] = 0;
+            }
+
+      /* Mark the blobs in the input image */
+      for (z = 0; z < Zdim; z++)
+         for (y = 0; y < Ydim; y++)
+            for (x = 0; x < Xdim; x++)
+               if (Data1[z][y][x] == 1)
+               {
+                  MeanX = MeanY = MeanZ = 0.0;
+                  Size = 0;
+                  BlobColor3D(x, y, z, Color);
+                  if ((Size < MinSize) || (Size > MaxSize))
+                     BlobErase3D(x, y, z, Color);
+                  else
+                  {
+                     MeanX /= Size;
+                     MeanY /= Size;
+                     MeanZ /= Size;
+                     if (Debug == TRUE)
+                        printf("blob %4d size %4d pos %5d %5d %5d\n",
+                               Color, Size, (int) (0.5 + MeanX),
+                               (int) (0.5 + MeanY), (int) (0.5 + MeanZ));
+                     Color++;
+                  }
+               }
+
+      /* Write information to output image */
+      im_write(Image2, SHORT, (char *) &(Data2[0][0][0]));
+      im_free3D((char ***) Data1);
+      im_free3D((char ***) Data2);
+   }
+   return (0);
+}

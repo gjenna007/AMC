@@ -1,0 +1,164 @@
+/*---------------------------------------------------------------------------*/
+/* Program:  contour.c                                                       */
+/*                                                                           */
+/* Purpose:  This program outputs the outline contour for each object        */
+/*           in a binary input file.  The contours are written in ascii      */
+/*           to an output file.                                              */
+/*                                                                           */
+/* Author:   John Gauch                                                      */
+/*                                                                           */
+/* Date:     April 13, 1994                                                  */
+/*                                                                           */
+/* Note:     Copyright (C) The University of Kansas, 1994                    */
+/*---------------------------------------------------------------------------*/
+#include <IM.h>
+
+/* Global variables */
+SHORT_TYPE **Data1;
+SHORT_TYPE **Data2;
+int Xdim, Ydim, Zdim;
+int dx[8] =
+{-1, -1, 0, 1, 1, 1, 0, -1};
+int dy[8] =
+{0, 1, 1, 1, 0, -1, -1, -1};
+FILE *fd;
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This procedure takes one step on contour.                       */
+/*---------------------------------------------------------------------------*/
+int GetNext(int x, int y, int last)
+{
+   int nx, ny, next;
+
+   next = (last + 2) % 8;
+   nx = x + dx[next];
+   ny = y + dy[next];
+   while ((next != last) &&
+          ((nx < 0) || (nx >= Xdim) ||
+           (ny < 0) || (ny >= Ydim) ||
+           (Data1[ny][nx] == 0)))
+   {
+      next = (next + 1) % 8;
+      nx = x + dx[next];
+      ny = y + dy[next];
+   }
+   return (next);
+}
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This procedure finds all contours.                              */
+/*---------------------------------------------------------------------------*/
+void Contour()
+{
+   int sx, sy, x, y;
+   int last, next;
+
+   /* Make image binary */
+   for (y = 0; y < Ydim; y++)
+      for (x = 0; x < Xdim; x++)
+      {
+         if (Data1[y][x] < 0)
+            Data1[y][x] = 0;
+         else if (Data1[y][x] > 1)
+            Data1[y][x] = 1;
+         Data2[y][x] = 0;
+      }
+
+   /* Search for starting positions */
+   for (sy = 0; sy < Ydim; sy++)
+      for (sx = 0; sx < Xdim; sx++)
+         if ((Data1[sy][sx] == 1) && ((sx == 0) || (Data1[sy][sx - 1] == 0)))
+         {
+            /* Prepare to track contour */
+            x = sx;
+            y = sy;
+            Data1[y][x] = -1;
+            Data2[y][x] = 1;
+            last = 0;
+            next = GetNext(x, y, last);
+            fprintf(fd, "START CONTOUR\n%d %d\n", x, y);
+
+            /* Track contour counter clockwise */
+            while (Data1[y + dy[next]][x + dx[next]] > 0)
+            {
+               x = x + dx[next];
+               y = y + dy[next];
+               Data1[y][x] = 2;
+               Data2[y][x] = 1;
+               last = (next + 4) % 8;
+               next = GetNext(x, y, last);
+               fprintf(fd, "%d %d\n", x, y);
+            }
+            fprintf(fd, "-1 -1\n");
+         }
+}
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This is the main program.                                       */
+/*---------------------------------------------------------------------------*/
+int main(int argc, char *argv[])
+{
+   /* Image variables */
+   char Name1[50];
+   char Name2[50];
+   char Name3[50];
+   IM_TYPE *Image1;
+   IM_TYPE *Image2;
+   int PixType, DimCnt;
+
+   /* Program variables */
+   int Debug = FALSE;
+   int i = 0;
+
+   /* Interpret program options */
+   printf("CONTOUR Program - KUIM Version 1.0\n\n");
+   while ((++i < argc) && (argv[i][0] == '-'))
+      switch (argv[i][1])
+      {
+      case 'd':
+         Debug = TRUE;
+         break;
+      default:
+         Error("Invalid option encountered");
+         break;
+      }
+
+   /* Check number of file names */
+   if (argc - i != 3)
+   {
+      fprintf(stderr, "Usage: contour [options] infile outfile confile\n");
+      fprintf(stderr, "       [-d]    Print debugging information\n");
+      exit(1);
+   }
+
+   /* Get image file names from argument list */
+   if (sscanf(argv[i++], "%s", Name1) == 0)
+      Error("Could not get input file name");
+   if (sscanf(argv[i++], "%s", Name2) == 0)
+      Error("Could not get output file name");
+   if (sscanf(argv[i++], "%s", Name3) == 0)
+      Error("Could not get contour file name");
+
+   /* Read input image */
+   Image1 = im_open(Name1, &PixType, &Xdim, &Ydim, &Zdim, &DimCnt);
+   if (DimCnt != 2)
+      Error("Can not process 1D or 3D images");
+   Data1 = (SHORT_TYPE **) im_alloc2D(Image1, SHORT);
+   im_read(Image1, SHORT, (char *) &(Data1[0][0]));
+
+   /* Create output image */
+   Image2 = im_create(Name2, SHORT, Xdim, Ydim, Zdim);
+   Data2 = (SHORT_TYPE **) im_alloc2D(Image2, SHORT);
+   if ((fd = fopen(Name3, "w")) == NULL)
+      Error("Could not open output file");
+
+   /* Find contours */
+   Contour();
+
+   /* Write information to output image */
+   im_write(Image2, SHORT, (char *) &(Data2[0][0]));
+   im_free2D((char **) Data1);
+   im_free2D((char **) Data2);
+   fclose(fd);
+   return (0);
+}
