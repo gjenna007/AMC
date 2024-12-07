@@ -1,0 +1,382 @@
+/*---------------------------------------------------------------------------*/
+/* Program:  hough.c                                                         */
+/*                                                                           */
+/* Purpose:  This program implements two variations on the Hough transform.  */
+/*                                                                           */
+/*           1) A point based Hough transform (-p option).                   */
+/*           The gradient magnitude and direction are calculated for each    */
+/*           point of the input image and a single point is output in the    */
+/*           output Hough image.  The Hough array is searched for local      */
+/*           maxima to identify lines in the original image.                 */
+/*                                                                           */
+/*           2) A line based Hough transform (-l option).                    */
+/*           The gradient magnitude of the input image is thresholded and    */
+/*           a line (actually a curve) is plotted in the Hough image.        */
+/*           Again, the Hough array is searched for local maxima to          */
+/*           identify lines in the original image.                           */
+/*                                                                           */
+/*           Once line parameters are determined, line segments are          */
+/*           plotted in an output image together with the set of points      */
+/*           whose gradient exceeded the threshold specified. Two parameters */
+/*           control the sensitivity of the algorithm.  The gradient         */
+/*           threshold is given by the -g flag, and the Hough threshold      */
+/*           which excludes weak local maxima is given by the -h flag.       */
+/*           The size of the Hough image is given by the -r and -t flags.    */
+/*                                                                           */
+/* Author:   John Gauch                                                      */
+/*                                                                           */
+/* Date:     February 9, 1994 - Original program.                            */
+/*           May 31, 1996     - Added line segment analysis.                 */
+/*                                                                           */
+/* Note:     Copyright (C) The University of Kansas, 1994-1996               */
+/*---------------------------------------------------------------------------*/
+#include <IM.h>
+double sqrt();
+double atan2();
+double sin();
+double cos();
+
+/* Global variables */
+int Rdim = 300;                 /* Size of the output image in R dimension */
+int Tdim = 360;                 /* Size of the output image in T dimension */
+float Gthresh = 10;             /* Gradient threshold for edge detection */
+float Hthresh = 200;            /* Hough threshold for edge detection */
+int Lthresh = 10;               /* Minimum line length to draw */
+int Debug = FALSE;              /* Debugging flag */
+int Point = FALSE;              /* Record points instead of lines */
+int Xdim, Ydim, Zdim;           /* Image dimensions */
+FLOAT_TYPE **Data1;
+FLOAT_TYPE **Data2;
+FLOAT_TYPE **Data3;
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This routine draws line segments in the line image.             */
+/*---------------------------------------------------------------------------*/
+void DrawLine(float radius, float theta)
+{
+   float M, B;                  /* Euclidean coordinate line parameters */
+   int x, y;                    /* Image indices */
+   int start, end;              /* Line end points */
+
+   /* Handle lines with X changing faster than Y */
+   if (((theta >= M_PI / 4) && (theta <= 3 * M_PI / 4)) ||
+       ((-theta >= M_PI / 4) && (-theta <= 3 * M_PI / 4)))
+   {
+      M = (float) cos(theta) / (float) sin(theta);
+      B = radius / (float) sin(theta) + (Xdim / 2) * M + Ydim / 2;
+      start = end = -1;
+      for (x = 0; x < Xdim; x++)
+      {
+         /* Get line coordinates */
+         y = (int) (0.5 + B - x * M);
+         if ((y >= 0) && (y < Ydim))
+            if ((Data1[y][x] > 0) && (start < 0))
+               start = x;
+            else if ((Data1[y][x] == 0) && (start > 0))
+            {
+               /* Draw only long lines */
+               end = x;
+               if (end - start > Lthresh)
+               {
+                  if (Debug == TRUE)
+                     printf("line (%d, %d) to (%d, %d) length %d\n",
+                     start, (int) (0.5 + B - start * M), x, y, end - start);
+                  for (x = start; x < end; x++)
+                  {
+                     y = (int) (0.5 + B - x * M);
+                     Data2[y][x] = 1;
+                  }
+               }
+               start = end = -1;
+            }
+      }
+   }
+
+   /* Handle lines with Y changing faster than X */
+   else
+   {
+      M = (float) sin(theta) / (float) cos(theta);
+      B = radius / (float) cos(theta) + (Ydim / 2) * M + Xdim / 2;
+      start = end = -1;
+      for (y = 0; y < Ydim; y++)
+      {
+         /* Get line coordinates */
+         x = (int) (0.5 + B - y * M);
+         if ((x >= 0) && (x < Xdim))
+            if ((Data1[y][x] > 0) && (start < 0))
+               start = y;
+            else if ((Data1[y][x] == 0) && (start > 0))
+            {
+               /* Draw only long lines */
+               end = y;
+               if (end - start > Lthresh)
+               {
+                  if (Debug == TRUE)
+                     printf("Line (%d, %d) to (%d, %d) length %d\n",
+                     (int) (0.5 + B - start * M), start, x, y, end - start);
+                  for (y = start; y < end; y++)
+                  {
+                     x = (int) (0.5 + B - y * M);
+                     Data2[y][x] = 1;
+                  }
+               }
+               start = end = -1;
+            }
+      }
+   }
+}
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This routine calculates the Hough transform.                    */
+/*---------------------------------------------------------------------------*/
+void Hough()
+{
+   int x, y, r, t;              /* Image indices */
+   float dx, dy, mag;           /* Intensity gradient */
+   float radius, theta;         /* Hough transform values */
+   float max_radius;            /* Maximum radius range */
+   float max_theta;             /* Maximum theta range */
+   int dr, dt;                  /* Hough offset indices */
+   int max;                     /* Boolean flag */
+   float *SIN, *COS;            /* Lookup tables for sin and cos */
+   int last;                    /* Last value of r */
+
+   /* Calculate range of radius and theta */
+   max_radius = (float) sqrt((double) (Xdim * Xdim + Ydim * Ydim));
+   max_theta = M_PI * 2;
+
+   /* Initialize SIN and COS lookup tables from 0 to 2 PI */
+   SIN = (float *) malloc((unsigned) Tdim * sizeof(float));
+   COS = (float *) malloc((unsigned) Tdim * sizeof(float));
+   for (t = 0; t < Tdim; t++)
+   {
+      theta = (t - Tdim / 2) * max_theta / Tdim;
+      SIN[t] = (float) sin(theta);
+      COS[t] = (float) cos(theta);
+   }
+
+   /* Process input image to calculate Hough array */
+   for (y = 1; y < (Ydim - 1); y++)
+      for (x = 1; x < (Xdim - 1); x++)
+      {
+         /* Calculate Sobel gradient */
+         dx = (Data1[y + 1][x + 1] + 2 * Data1[y][x + 1] + Data1[y - 1][x + 1]
+               - Data1[y + 1][x - 1] - 2 * Data1[y][x - 1] - Data1[y - 1][x - 1]) / 8;
+         dy = (Data1[y + 1][x + 1] + 2 * Data1[y + 1][x] + Data1[y + 1][x - 1]
+               - Data1[y - 1][x + 1] - 2 * Data1[y - 1][x] - Data1[y - 1][x - 1]) / 8;
+         mag = (float) sqrt((double) (dx * dx + dy * dy));
+
+         /* Record single (r,t) point for strong edge pixels */
+         if ((mag > Gthresh) && (Point == TRUE))
+         {
+            Data2[y][x] = 1;
+            dx = dx / mag;
+            dy = dy / mag;
+            radius = (x - Xdim / 2) * dx + (y - Ydim / 2) * dy;
+            theta = (float) atan2((double) dy, (double) dx);
+            r = (int) (0.5 + (radius / max_radius + 0.5) * Rdim);
+            t = (int) (0.5 + (theta / max_theta + 0.5) * Tdim);
+            if ((r >= 0) && (r < Rdim) && (t >= 0) && (t < Tdim))
+               Data3[t][r] += mag;
+         }
+
+         /* Record line of (r,t) values for strong edge pixels */
+         else if (mag > Gthresh)
+         {
+            /* Draw first point */
+            Data2[y][x] = 1;
+            t = 0;
+            dx = COS[t];
+            dy = SIN[t];
+            radius = (x - Xdim / 2) * dx + (y - Ydim / 2) * dy;
+            r = (int) (0.5 + (radius / max_radius + 0.5) * Rdim);
+            if ((r >= 0) && (r < Rdim))
+            {
+               Data3[t][r]++;
+               Data3[t + Tdim / 2][Rdim - r]++;
+            }
+            last = r;
+
+            /* Draw remaining points */
+            for (t = 1; t < (Tdim / 2); t++)
+            {
+               dx = COS[t];
+               dy = SIN[t];
+               radius = (x - Xdim / 2) * dx + (y - Ydim / 2) * dy;
+               r = (int) (0.5 + (radius / max_radius + 0.5) * Rdim);
+               if ((r >= 0) && (r < Rdim))
+               {
+                  /* Draw next point */
+                  Data3[t][r]++;
+                  Data3[t + Tdim / 2][Rdim - r]++;
+
+                  /* Fill in any missing points */
+                  while ((last - 1 > r) && (last < Rdim))
+                  {
+                     last--;
+                     Data3[t][last]++;
+                     Data3[t + Tdim / 2][Rdim - last]++;
+                  }
+                  while ((last + 1 < r) && (last > 0))
+                  {
+                     last++;
+                     Data3[t][last]++;
+                     Data3[t + Tdim / 2][Rdim - last]++;
+                  }
+               }
+               last = r;
+            }
+         }
+      }
+
+   /* Thicken edge region */
+   for (y = 0; y < Ydim; y++)
+      Data1[y][0] = Data1[y][Xdim - 1] = 0;
+   for (x = 0; x < Xdim; x++)
+      Data1[0][x] = Data1[Ydim - 1][x] = 0;
+   for (y = 1; y < (Ydim - 1); y++)
+      for (x = 1; x < (Xdim - 1); x++)
+         Data1[y][x] = Data2[y + 1][x + 1] + Data2[y][x + 1] + Data2[y - 1][x + 1] +
+            Data2[y + 1][x] + Data2[y][x] + Data2[y - 1][x] +
+            Data2[y + 1][x - 1] + Data2[y][x - 1] + Data2[y - 1][x - 1];
+
+   /* Clear the output image */
+   for (y = 0; y < Ydim; y++)
+      for (x = 0; x < Xdim; x++)
+         Data2[y][x] = 0;
+
+   /* Process Hough array to find strong maxima */
+   for (t = 0; t < Tdim / 2; t++)
+      for (r = 0; r < Rdim; r++)
+         if (Data3[t][r] > Hthresh)
+         {
+            /* Check 5x5 neighborhood for max */
+            max = TRUE;
+            for (dt = (t - 2); dt <= (t + 2); dt++)
+               for (dr = (r - 2); dr <= (r + 2); dr++)
+                  if ((dr >= 0) && (dr < Rdim) && (dt >= 0) && (dt < Tdim) &&
+                      (Data3[dt][dr] > Data3[t][r]))
+                  {
+                     max = FALSE;
+                     break;
+                  }
+
+            /* Process line array to plot line segments */
+            if (max == TRUE)
+            {
+               radius = ((float) r / (float) Rdim - 0.5) * max_radius;
+               theta = ((float) t / (float) Tdim - 0.5) * max_theta;
+               DrawLine(radius, theta);
+            }
+         }
+}
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This is the main program.                                       */
+/*---------------------------------------------------------------------------*/
+int main(int argc, char *argv[])
+{
+   /* Image variables */
+   char Name1[50];
+   char Name2[50];
+   char Name3[50];
+   IM_TYPE *Image1;
+   IM_TYPE *Image2;
+   IM_TYPE *Image3;
+   int PixType, DimCnt;
+
+   /* Program variables */
+   int i = 0;
+
+   /* Interpret program options */
+   printf("HOUGH Program - KUIM Version 2.0\n\n");
+   while ((++i < argc) && (argv[i][0] == '-'))
+      switch (argv[i][1])
+      {
+      case 'd':
+         Debug = TRUE;
+         break;
+      case 'p':
+         Point = TRUE;
+         break;
+      case 'r':
+         if (sscanf(argv[++i], "%d", &Rdim) == 0)
+            Error("Can not get radius dimension");
+         if (Debug == TRUE)
+            printf("Radius %d\n", Rdim);
+         break;
+      case 't':
+         if (sscanf(argv[++i], "%d", &Tdim) == 0)
+            Error("Can not get theta dimension");
+         if (Debug == TRUE)
+            printf("Theta %d\n", Tdim);
+         break;
+      case 'l':
+         if (sscanf(argv[++i], "%d", &Lthresh) == 0)
+            Error("Can not get line length threshold");
+         if (Debug == TRUE)
+            printf("Lthresh %d\n", Lthresh);
+         break;
+      case 'g':
+         if (sscanf(argv[++i], "%f", &Gthresh) == 0)
+            Error("Can not get gradient magnitude threshold");
+         if (Debug == TRUE)
+            printf("Gthresh %f\n", Gthresh);
+         break;
+      case 'h':
+         if (sscanf(argv[++i], "%f", &Hthresh) == 0)
+            Error("Can not get Hough strength threshold");
+         if (Debug == TRUE)
+            printf("Hthresh %f\n", Hthresh);
+         break;
+      default:
+         Error("Invalid option encountered");
+         break;
+      }
+
+   /* Check number of file names */
+   if (argc - i != 3)
+   {
+      fprintf(stderr, "Usage: hough [options] infile linefile houghfile\n");
+      fprintf(stderr, "       [-d]    Print debugging information\n");
+      fprintf(stderr, "       [-p]    Record (r,t) points (FALSE)\n");
+      fprintf(stderr, "       [-r #]  Size of radius dimension (300)\n");
+      fprintf(stderr, "       [-t #]  Size of theta dimension (360)\n");
+      fprintf(stderr, "       [-l #]  Minimum line length threshold (10)\n");
+      fprintf(stderr, "       [-g #]  Gradient magnitude threshold (10)\n");
+      fprintf(stderr, "       [-h #]  Hough strength threshold (200)\n");
+      exit(1);
+   }
+
+   /* Get image file names from argument list */
+   if (sscanf(argv[i++], "%s", Name1) == 0)
+      Error("Could not get input file name");
+   if (sscanf(argv[i++], "%s", Name2) == 0)
+      Error("Could not get output file name");
+   if (sscanf(argv[i++], "%s", Name3) == 0)
+      Error("Could not get output file name");
+
+   /* Read input image */
+   Image1 = im_open(Name1, &PixType, &Xdim, &Ydim, &Zdim, &DimCnt);
+   if (DimCnt != 2)
+      Error("Can not process 1D or 3D images");
+   Data1 = (FLOAT_TYPE **) im_alloc2D(Image1, FLOAT);
+   im_read(Image1, FLOAT, (char *) &(Data1[0][0]));
+
+   /* Create output image */
+   Image2 = im_create(Name2, SHORT, Xdim, Ydim, Zdim);
+   Data2 = (FLOAT_TYPE **) im_alloc2D(Image2, FLOAT);
+   Image3 = im_create(Name3, SHORT, Rdim, Tdim, 1);
+   Data3 = (FLOAT_TYPE **) im_alloc2D(Image3, FLOAT);
+
+   /* Calculate Hough transform */
+   Hough();
+
+   /* Write information to output image */
+   im_write(Image2, FLOAT, (char *) &(Data2[0][0]));
+   im_write(Image3, FLOAT, (char *) &(Data3[0][0]));
+   im_free2D((char **) Data1);
+   im_free2D((char **) Data2);
+   im_free2D((char **) Data3);
+   return (0);
+}

@@ -1,0 +1,624 @@
+/*---------------------------------------------------------------------------*/
+/* Program:  water_merge.c                                                   */
+/*                                                                           */
+/* Purpose:  This program performs image segmentation by merging adjacent    */
+/*           watershed regions. A number of input parameters                 */
+/*           control how many internal iterations are performed and how      */
+/*           similar regions must be in order to be merged.                  */
+/*                                                                           */
+/* Author:   John Gauch                                                      */
+/*                                                                           */
+/* Date:     March 29, 1996   - Original program.                            */
+/*           January 29, 1997 - Added variable sized data structures.        */
+/*                                                                           */
+/* Note:     Copyright (C) The University of Kansas, 1996-1997               */
+/*---------------------------------------------------------------------------*/
+#include <IM.h>
+#define MERGE_GRAD 1
+#define MERGE_MEAN 2
+#define MERGE_VAR  3
+#define HASH       5
+#define EXTRA   1000
+
+/* Global variables */
+int Debug = FALSE;
+int Method = MERGE_MEAN;
+int Xdim, Ydim, Zdim;
+int NumSmooth = 5;
+int NumMerge = 10;
+float Alpha = 0.5;
+float Threshold = 10;
+int Entries = 0;
+int Collide = 0;
+
+/* Adjacent region information */
+struct InfoRec
+{
+   int R1;
+   int R2;
+   int Count;
+   float Grad;
+};
+struct InfoRec *Info;
+int InfoCount;
+
+/* Watershed region statistics */
+struct RegionRec
+{
+   int Size;
+   int Parent;
+   float SumI1;
+   float SumI2;
+};
+struct RegionRec *Region;
+int RegionCount = 1;
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This routine presmooths the image.                              */
+/*---------------------------------------------------------------------------*/
+void presmooth(FLOAT_TYPE ** In, FLOAT_TYPE ** Out)
+{
+   int x, y;
+
+   /* Calculate local average */
+   if (Debug == TRUE)
+      printf("presmooth\n");
+   for (y = 1; y < Ydim - 1; y++)
+      for (x = 1; x < Xdim - 1; x++)
+      {
+         Out[y][x] = (In[y - 1][x - 1] + In[y - 1][x] + In[y - 1][x + 1] +
+                      In[y][x - 1] + In[y][x] + In[y][x + 1] +
+                    In[y + 1][x - 1] + In[y + 1][x] + In[y + 1][x + 1]) / 9;
+      }
+
+   /* Handle boundary of image */
+   for (y = 0; y < Ydim; y++)
+   {
+      Out[y][0] = Out[y][1] * 2;
+      Out[y][Xdim - 1] = Out[y][Xdim - 2] * 2;
+   }
+   for (x = 0; x < Xdim; x++)
+   {
+      Out[0][x] = Out[1][x] * 2;
+      Out[Ydim - 1][x] = Out[Ydim - 2][x] * 2;
+   }
+}
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This routine calculates the gradient.                           */
+/*---------------------------------------------------------------------------*/
+void gradient(FLOAT_TYPE ** In, FLOAT_TYPE ** Out)
+{
+   int x, y;
+   float Dx, Dy;
+
+   /* Calculate gradient magnitude image */
+   if (Debug == TRUE)
+      printf("gradient\n");
+   for (y = 1; y < (Ydim - 1); y++)
+      for (x = 1; x < (Xdim - 1); x++)
+      {
+         Dx = (In[y + 1][x + 1] + 2 * In[y][x + 1] + In[y - 1][x + 1]
+               - In[y + 1][x - 1] - 2 * In[y][x - 1] - In[y - 1][x - 1]) / 8;
+         Dy = (In[y + 1][x + 1] + 2 * In[y + 1][x] + In[y + 1][x - 1]
+               - In[y - 1][x + 1] - 2 * In[y - 1][x] - In[y - 1][x - 1]) / 8;
+         Out[y][x] = (FLOAT_TYPE) sqrt((double) (Dx * Dx + Dy * Dy));
+      }
+   for (x = 0; x < Xdim; x++)
+   {
+      Out[0][x] = Out[1][x];
+      Out[Ydim - 1][x] = Out[Ydim - 2][x];
+   }
+   for (y = 0; y < Ydim; y++)
+   {
+      Out[y][0] = Out[y][1];
+      Out[y][Xdim - 1] = Out[y][Xdim - 2];
+   }
+
+}
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This routine calculates the watersheds.                         */
+/*---------------------------------------------------------------------------*/
+void watershed(FLOAT_TYPE ** In, FLOAT_TYPE ** Grad, INT_TYPE ** Out)
+{
+   int x, y, X, Y, index;
+   int MinIndex;
+   float MinValue;
+
+   /* Mark boundary as pseudo-minima */
+   if (Debug == TRUE)
+      printf("watershed\n");
+   for (y = 0; y < Ydim; y++)
+      Out[y][0] = Out[y][Xdim - 1] = RegionCount;
+   for (x = 0; x < Xdim; x++)
+      Out[0][x] = Out[Ydim - 1][x] = RegionCount;
+
+   /* Find local minima and gradient for each pixel */
+   for (y = 1; y < (Ydim - 1); y++)
+      for (x = 1; x < (Xdim - 1); x++)
+      {
+         MinValue = Grad[y][x];
+         MinIndex = 4;
+         for (Y = 0; Y < 3; Y++)
+            for (X = 0; X < 3; X++)
+               if (Grad[y + Y - 1][x + X - 1] <= MinValue)
+               {
+                  MinValue = Grad[y + Y - 1][x + X - 1];
+                  MinIndex = Y * 3 + X;
+               }
+         if (MinIndex == 4)
+            Out[y][x] = (++RegionCount);
+         else
+            Out[y][x] = -MinIndex;
+      }
+
+   /* Allocate arrays for watershed statistics */
+   if (Debug == TRUE)
+      printf("region count %d\n", RegionCount);
+   InfoCount = RegionCount * HASH + EXTRA;
+   Region = (struct RegionRec *) calloc(RegionCount + 1, sizeof(struct RegionRec));
+   Info = (struct InfoRec *) calloc(InfoCount, sizeof(struct InfoRec));
+
+   /* Follow gradient downhill for each pixel */
+   for (y = 1; y < (Ydim - 1); y++)
+      for (x = 1; x < (Xdim - 1); x++)
+      {
+         X = x;
+         Y = y;
+         while (Out[Y][X] <= 0)
+         {
+            switch (Out[Y][X])
+            {
+            case 0:
+               X--;
+               Y--;
+               break;
+            case -1:
+               Y--;
+               break;
+            case -2:
+               X++;
+               Y--;
+               break;
+            case -3:
+               X--;
+               break;
+            case -5:
+               X++;
+               break;
+            case -6:
+               X--;
+               Y++;
+               break;
+            case -7:
+               Y++;
+               break;
+            case -8:
+               X++;
+               Y++;
+               break;
+            }
+         }
+         index = Out[y][x] = Out[Y][X];
+         Region[index].Size++;
+         Region[index].Parent = -1;
+         Region[index].SumI1 += In[y][x];
+         Region[index].SumI2 += In[y][x] * In[y][x];
+      }
+}
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This routine smooths the image within watersheds.               */
+/*---------------------------------------------------------------------------*/
+void smooth(FLOAT_TYPE ** Raw, FLOAT_TYPE ** In, INT_TYPE ** Region, FLOAT_TYPE ** Out)
+{
+   int i, x, y, X, Y, Count;
+   float Sum, Change;
+
+   /* Perform iterative smoothing */
+   for (i = 0; i < NumSmooth; i++)
+   {
+      /* Calculate local average within watershed regions */
+      if (Debug == TRUE)
+         printf("smooth\n");
+      for (y = 0; y < Ydim; y++)
+         for (x = 0; x < Xdim; x++)
+         {
+            Count = -1;
+            Sum = -In[y][x];
+            for (Y = (y - 1); Y <= (y + 1); Y++)
+               for (X = (x - 1); X <= (x + 1); X++)
+                  if ((X > 0) && (Y > 0) && (X < Xdim) && (Y < Ydim) &&
+                      (Region[y][x] == Region[Y][X]))
+                  {
+                     Count++;
+                     Sum += In[Y][X];
+                  }
+            Out[y][x] = (Raw[y][x] + Alpha * Sum) / (1 + Alpha * Count);
+         }
+
+      /* Copy the data back for next iteration */
+      Change = 0.0;
+      for (y = 0; y < Ydim; y++)
+         for (x = 0; x < Xdim; x++)
+         {
+            if (In[y][x] > Out[y][x])
+               Change += (In[y][x] - Out[y][x]);
+            else
+               Change -= (In[y][x] - Out[y][x]);
+            In[y][x] = Out[y][x];
+         }
+      if (Debug == TRUE)
+         printf("Iteration %d had average change %f\n", i, Change / (Xdim * Ydim));
+   }
+}
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This routine finds the parent of a region.                      */
+/*---------------------------------------------------------------------------*/
+int parent(int Region1)
+{
+   while (Region[Region1].Parent > 0)
+      Region1 = Region[Region1].Parent;
+   return (Region1);
+}
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This routine calculates difference in region means.             */
+/*---------------------------------------------------------------------------*/
+float meandiff(int Region1, int Region2)
+{
+   float diff;
+   int old1 = Region1;
+   int old2 = Region2;
+
+   /* Find parents of regions */
+   while (Region[Region1].Parent > 0)
+      Region1 = Region[Region1].Parent;
+   while (Region[Region2].Parent > 0)
+      Region2 = Region[Region2].Parent;
+
+   /* Calculate difference in means */
+   if (Region[Region1].Size == 0)
+   {
+      return (0);
+      printf("old1 = %d, region1 = %d is zero size\n", old1, Region1);
+   }
+   if (Region[Region2].Size == 0)
+   {
+      return (0);
+      printf("old2 = %d, region2 = %d is zero size\n", old2, Region2);
+   }
+
+   diff = Region[Region1].SumI1 / Region[Region1].Size
+      - Region[Region2].SumI1 / Region[Region2].Size;
+   if (diff > 0)
+      return (diff);
+   else
+      return (-diff);
+}
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This routine calculates combined region variance.               */
+/*---------------------------------------------------------------------------*/
+float variance(int Region1, int Region2)
+{
+   int count;
+   float mean;
+   float var;
+
+   /* Find parents of regions */
+   while (Region[Region1].Parent > 0)
+      Region1 = Region[Region1].Parent;
+   while (Region[Region2].Parent > 0)
+      Region2 = Region[Region2].Parent;
+
+   /* Calculate combined region variance */
+   count = Region[Region1].Size + Region[Region2].Size;
+   mean = (Region[Region1].SumI1 + Region[Region2].SumI1) / count;
+   var = (Region[Region1].SumI2 + Region[Region2].SumI2) / count - mean * mean;
+   return (var);
+}
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This routine saves info about adjacent regions.                 */
+/*---------------------------------------------------------------------------*/
+void save(int Region1, int Region2, float Grad)
+{
+   int Index;
+
+   /* Swap region numbers if needed */
+   if (Region1 < Region2)
+   {
+      Index = Region1;
+      Region1 = Region2;
+      Region2 = Index;
+   }
+
+   /* Search for existing entry */
+   Index = Region1 * HASH;
+   while ((Index < InfoCount) && (Info[Index].Count > 0))
+   {
+      if ((Info[Index].R1 == Region1) && (Info[Index].R2 == Region2))
+      {
+         Info[Index].Count++;
+         Info[Index].Grad += Grad;
+         Index = InfoCount;
+      }
+      else
+      {
+         Index++;
+         Collide++;
+      }
+   }
+
+   /* Add new entry if needed */
+   if (Index < InfoCount)
+   {
+      Info[Index].R1 = Region1;
+      Info[Index].R2 = Region2;
+      Info[Index].Count = 1;
+      Info[Index].Grad = Grad;
+      Entries++;
+   }
+}
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This routine merges two regions.                                */
+/*---------------------------------------------------------------------------*/
+void merge(int Region1, int Region2)
+{
+   /* Find parents of regions */
+   while (Region[Region1].Parent > 0)
+      Region1 = Region[Region1].Parent;
+   while (Region[Region2].Parent > 0)
+      Region2 = Region[Region2].Parent;
+
+   /* Adjust parent pointers and statistics */
+   if (Region1 < Region2)
+   {
+      Region[Region2].Parent = Region1;
+      Region[Region1].Size += Region[Region2].Size;
+      Region[Region1].SumI1 += Region[Region2].SumI1;
+      Region[Region1].SumI2 += Region[Region2].SumI2;
+   }
+   else if (Region1 > Region2)
+   {
+      Region[Region1].Parent = Region2;
+      Region[Region2].Size += Region[Region1].Size;
+      Region[Region2].SumI1 += Region[Region1].SumI1;
+      Region[Region2].SumI2 += Region[Region1].SumI2;
+   }
+}
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This routine combines watersheds based on edge strengths.       */
+/*---------------------------------------------------------------------------*/
+void combine(INT_TYPE ** region, FLOAT_TYPE ** Grad, float Threshold)
+{
+   int i, x, y;
+   int Count, Region1;
+
+   /* Clear the adjacency information */
+   for (i = 0; i < InfoCount; i++)
+   {
+      Info[i].R1 = 0;
+      Info[i].R2 = 0;
+      Info[i].Grad = 0;
+      Info[i].Count = 0;
+   }
+
+   /* Save adjacent region edge strengths */
+   if (Debug == TRUE)
+      printf("combine\n");
+   for (y = 1; y < Ydim; y++)
+      for (x = 1; x < Xdim; x++)
+      {
+         if (region[y][x] != region[y - 1][x])
+            save(region[y][x], region[y - 1][x], Grad[y][x]);
+         if (region[y][x] != region[y][x - 1])
+            save(region[y][x], region[y][x - 1], Grad[y][x]);
+      }
+
+   /* Merge adjacent regions */
+   Count = 0;
+   if (Method == MERGE_MEAN)
+   {
+      for (i = 0; i < InfoCount; i++)
+         if ((Info[i].Count > 0) &&
+             (parent(Info[i].R1) != parent(Info[i].R2)) &&
+             (meandiff(Info[i].R1, Info[i].R2) < Threshold))
+         {
+            merge(Info[i].R1, Info[i].R2);
+            Count++;
+         }
+   }
+   else if (Method == MERGE_VAR)
+   {
+      for (i = 0; i < InfoCount; i++)
+         if ((Info[i].Count > 0) &&
+             (parent(Info[i].R1) != parent(Info[i].R2)) &&
+             (variance(Info[i].R1, Info[i].R2) < Threshold))
+         {
+            merge(Info[i].R1, Info[i].R2);
+            Count++;
+         }
+   }
+   else if (Method == MERGE_GRAD)
+   {
+      for (i = 0; i < InfoCount; i++)
+         if ((Info[i].Count > 5) &&
+             (parent(Info[i].R1) != parent(Info[i].R2)) &&
+             ((Info[i].Grad / Info[i].Count) < Threshold))
+         {
+            merge(Info[i].R1, Info[i].R2);
+            Count++;
+         }
+   }
+
+   /* Print debug info */
+   if (Debug == TRUE)
+      printf("Merged %d adjacent regions\n", Count);
+
+   /* Renumber watershed regions */
+   for (y = 0; y < Ydim; y++)
+      for (x = 0; x < Xdim; x++)
+      {
+         Region1 = region[y][x];
+         while (Region[Region1].Parent > 0)
+            Region1 = Region[Region1].Parent;
+         region[y][x] = Region1;
+      }
+}
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This routine displays watersheds based on average intensity.    */
+/*---------------------------------------------------------------------------*/
+void display(INT_TYPE ** region, FLOAT_TYPE ** Out)
+{
+   int x, y, r;
+   int cnt = 0;
+
+   /* Calculate number of remaining regions */
+   for (r = 0; r < RegionCount; r++)
+      if (Region[r].Parent == -1)
+         cnt++;
+   if (Debug == TRUE)
+      printf("final region count %d\n", cnt);
+
+   /* Calculate average intensity in each region */
+   if (Debug == TRUE)
+      printf("display\n");
+   for (y = 0; y < Ydim; y++)
+      for (x = 0; x < Xdim; x++)
+      {
+         r = region[y][x];
+         if (Region[r].Size > 0)
+            Out[y][x] = Region[r].SumI1 / Region[r].Size;
+         else
+            Out[y][x] = 0;
+      }
+}
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This is the main program.                                       */
+/*---------------------------------------------------------------------------*/
+int main(int argc, char *argv[])
+{
+   /* Image variables */
+   char Name1[50];
+   char Name2[50];
+   IM_TYPE *Image1;
+   IM_TYPE *Image2;
+   FLOAT_TYPE **Data0;
+   FLOAT_TYPE **Data1;
+   INT_TYPE **Data2;
+   FLOAT_TYPE **Data3;
+   int PixType, DimCnt;
+
+   /* Program variables */
+   int i = 0;
+
+   /* Interpret program options */
+   printf("WATER_MERGE Program - KUIM Version 3.0\n\n");
+   while ((++i < argc) && (argv[i][0] == '-'))
+      switch (argv[i][1])
+      {
+      case 'd':
+         Debug = TRUE;
+         break;
+      case 'm':
+         Method = MERGE_MEAN;
+         break;
+      case 'g':
+         Method = MERGE_GRAD;
+         break;
+      case 'v':
+         Method = MERGE_VAR;
+         break;
+      case 'a':
+         if (sscanf(argv[++i], "%f", &Alpha) == 0)
+            Error("Could not get float argument");
+         break;
+      case 's':
+         if (sscanf(argv[++i], "%d", &NumSmooth) == 0)
+            Error("Could not get integer argument");
+         break;
+      case 'n':
+         if (sscanf(argv[++i], "%d", &NumMerge) == 0)
+            Error("Could not get integer argument");
+         break;
+      case 't':
+         if (sscanf(argv[++i], "%f", &Threshold) == 0)
+            Error("Could not get float argument");
+         break;
+      default:
+         Error("Invalid option encountered");
+         break;
+      }
+
+   /* Check number of file names */
+   if (argc - i != 2)
+   {
+      fprintf(stderr, "Usage: water_merge [options] infile outfile\n");
+      fprintf(stderr, "       [-d]    Print debugging information\n");
+      fprintf(stderr, "       [-m]    Merge based on difference in region means\n");
+      fprintf(stderr, "       [-g]    Merge based on gradient along regions\n");
+      fprintf(stderr, "       [-v]    Merge based on combined region variance\n");
+      fprintf(stderr, "       [-a #]  Neighborhood smoothing weight (%f)\n", Alpha);
+      fprintf(stderr, "       [-s #]  Number of smoothing iterations (%d)\n", NumSmooth);
+      fprintf(stderr, "       [-n #]  Number of merging iterations (%d)\n", NumMerge);
+      fprintf(stderr, "       [-t #]  Threshold for region merging (%f)\n", Threshold);
+      exit(1);
+   }
+
+   /* Get image file names from argument list */
+   if (sscanf(argv[i++], "%s", Name1) == 0)
+      Error("Could not get input file name");
+   if (sscanf(argv[i++], "%s", Name2) == 0)
+      Error("Could not get output file name");
+
+   /* Read input image */
+   Image1 = im_open(Name1, &PixType, &Xdim, &Ydim, &Zdim, &DimCnt);
+   if (DimCnt != 2)
+      Error("Can not process 1D or 3D images");
+   Data0 = (FLOAT_TYPE **) im_alloc2D(Image1, FLOAT);
+   Data1 = (FLOAT_TYPE **) im_alloc2D(Image1, FLOAT);
+   im_read(Image1, FLOAT, (char *) &(Data0[0][0]));
+
+   /* Create output image */
+   Image2 = im_create(Name2, INT, Xdim, Ydim, Zdim);
+   Data2 = (INT_TYPE **) im_alloc2D(Image2, INT);
+   Data3 = (FLOAT_TYPE **) im_alloc2D(Image2, FLOAT);
+
+   /* Calculate initial watersheds */
+   presmooth(Data0, Data1);
+   gradient(Data1, Data3);
+   watershed(Data1, Data3, Data2);
+   if (Method == MERGE_VAR)
+      Threshold *= Threshold;
+
+   /* Perform iterative smoothing and merging */
+   for (i = 1; i <= NumMerge; i++)
+   {
+      if (Method == MERGE_GRAD)
+      {
+         smooth(Data0, Data1, Data2, Data3);
+         gradient(Data1, Data3);
+      }
+      combine(Data2, Data3, i * Threshold / NumMerge);
+      if (Debug == TRUE)
+         printf("Loop %d Threshold %f Entries %d Collisions %d\n",
+                i, i * Threshold / NumMerge, Entries, Collide);
+      Entries = Collide = 0;
+   }
+
+   /* Write information to output image */
+   display(Data2, Data1);
+   im_write(Image2, FLOAT, (char *) &(Data1[0][0]));
+   im_free2D((char **) Data1);
+   im_free2D((char **) Data2);
+   im_free2D((char **) Data3);
+   return (0);
+}

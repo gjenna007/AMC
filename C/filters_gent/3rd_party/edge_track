@@ -1,0 +1,244 @@
+/*---------------------------------------------------------------------------*/
+/* Program:  edge_track.c                                                    */
+/*                                                                           */
+/* Purpose:  This program prompts the user for an x,y starting point and     */
+/*           tracks strong edges in the input from that point to get a       */
+/*           connected edge segment (which may not be closed).               */
+/*                                                                           */
+/* Author:   John Gauch                                                      */
+/*                                                                           */
+/* Date:     March 22, 1995                                                  */
+/*                                                                           */
+/* Note:     Copyright (C) The University of Kansas, 1995                    */
+/*---------------------------------------------------------------------------*/
+#include <IM.h>
+
+/*---------------------------------------------------------------------------*/
+/* Purpose:  This is the main program.                                       */
+/*---------------------------------------------------------------------------*/
+int main(int argc, char *argv[])
+{
+   /* Image variables */
+   char Name1[50];
+   char Name2[50];
+   IM_TYPE *Image1;
+   IM_TYPE *Image2;
+   FLOAT_TYPE **Data1;
+   FLOAT_TYPE **Dx;
+   FLOAT_TYPE **Dy;
+   FLOAT_TYPE **Grad;
+   SHORT_TYPE **Data2;
+   int PixType, Xdim, Ydim, Zdim, DimCnt;
+
+   /* Program variables */
+   int Debug = FALSE;
+   int Done = FALSE;
+   int StartX = 50, StartY = 50;
+   int PrevX, PrevY;
+   int NextX, NextY;
+   float Merit, NextMerit;
+   int i = 0, x, y;
+   int Count, Dist;
+   float Thresh = 10;
+
+   /* Interpret program options */
+   printf("EDGE_TRACK Program - KUIM Version 1.0\n\n");
+   while ((++i < argc) && (argv[i][0] == '-'))
+      switch (argv[i][1])
+      {
+      case 'd':
+         Debug = TRUE;
+         break;
+      case 'g':
+         if (sscanf(argv[++i], "%f", &Thresh) == 0)
+            Error("Could not get threshold argument");
+         break;
+      case 's':
+         if (sscanf(argv[++i], "%d", &StartX) == 0)
+            Error("Could not get start X argument");
+         if (sscanf(argv[++i], "%d", &StartY) == 0)
+            Error("Could not get start Y argument");
+         if (Debug == TRUE)
+            printf("start %d %d\n", StartX, StartY);
+         break;
+      default:
+         Error("Invalid option encountered");
+         break;
+      }
+
+   /* Check number of file names */
+   if (argc - i != 2)
+   {
+      fprintf(stderr, "Usage: edge_track [options] infile outfile\n");
+      fprintf(stderr, "       [-d]      Print debugging information\n");
+      fprintf(stderr, "       [-g #]    Gradient strength threshold (10)\n");
+      fprintf(stderr, "       [-s # #]  Starting X,Y position (50 50)\n");
+      exit(1);
+   }
+
+   /* Get image file names from argument list */
+   if (sscanf(argv[i++], "%s", Name1) == 0)
+      Error("Could not get input file name");
+   if (sscanf(argv[i++], "%s", Name2) == 0)
+      Error("Could not get output file name");
+
+   /* Read input image */
+   Image1 = im_open(Name1, &PixType, &Xdim, &Ydim, &Zdim, &DimCnt);
+   if (DimCnt != 2)
+      Error("Can not process 1D or 3D images");
+   Data1 = (FLOAT_TYPE **) im_alloc2D(Image1, FLOAT);
+   im_read(Image1, FLOAT, (char *) &(Data1[0][0]));
+
+   /* Create output and gradient images */
+   Image2 = im_create(Name2, SHORT, Xdim, Ydim, Zdim);
+   Dx = (FLOAT_TYPE **) im_alloc2D(Image2, FLOAT);
+   Dy = (FLOAT_TYPE **) im_alloc2D(Image2, FLOAT);
+   Grad = (FLOAT_TYPE **) im_alloc2D(Image2, FLOAT);
+   Data2 = (SHORT_TYPE **) im_alloc2D(Image2, SHORT);
+
+   /* Calculate gradient  */
+   for (y = 1; y < (Ydim - 1); y++)
+      for (x = 1; x < (Xdim - 1); x++)
+      {
+         Dx[y][x] = (Data1[y + 1][x + 1] + 2 * Data1[y][x + 1] + Data1[y - 1][x + 1]
+                     - Data1[y + 1][x - 1] - 2 * Data1[y][x - 1] - Data1[y - 1][x - 1]) / 8;
+         Dy[y][x] = (Data1[y + 1][x + 1] + 2 * Data1[y + 1][x] + Data1[y + 1][x - 1]
+                     - Data1[y - 1][x + 1] - 2 * Data1[y - 1][x] - Data1[y - 1][x - 1]) / 8;
+         Grad[y][x] = (FLOAT_TYPE) sqrt((double)
+                               (Dx[y][x] * Dx[y][x] + Dy[y][x] * Dy[y][x]));
+         if (Grad[y][x] < Thresh)
+            Grad[y][x] = 0;
+      }
+
+   /* Get starting point */
+   Data2[StartY][StartX] = 1;
+   NextX = PrevX = StartX;
+   NextY = PrevY = StartY;
+   NextMerit = 0;
+   Count = 0;
+   Done = FALSE;
+
+   /* Track edge assuming edge tangent is (Dy,-Dx) */
+   while ((Done == FALSE) && (PrevX > 0) && (PrevX < Xdim - 1) &&
+          (PrevY > 0) && (PrevY < Ydim - 1))
+   {
+      /* Consider (1,0) neighbor */
+      x = PrevX + 1;
+      y = PrevY;
+      Merit = Dy[PrevY][PrevX];
+      Merit *= (1 - Data2[y][x]) * Grad[y][x];
+      if (Merit > NextMerit)
+      {
+         NextX = x;
+         NextY = y;
+         NextMerit = Merit;
+      }
+
+      /* Consider (1,1) neighbor */
+      x = PrevX + 1;
+      y = PrevY + 1;
+      Merit = 0.7 * Dy[PrevY][PrevX] - 0.7 * Dx[PrevY][PrevX];
+      Merit *= (1 - Data2[y][x]) * Grad[y][x];
+      if (Merit > NextMerit)
+      {
+         NextX = x;
+         NextY = y;
+         NextMerit = Merit;
+      }
+
+      /* Consider (0,1) neighbor */
+      x = PrevX;
+      y = PrevY + 1;
+      Merit = -Dx[PrevY][PrevX];
+      Merit *= (1 - Data2[y][x]) * Grad[y][x];
+      if (Merit > NextMerit)
+      {
+         NextX = x;
+         NextY = y;
+         NextMerit = Merit;
+      }
+
+      /* Consider (-1,1) neighbor */
+      x = PrevX - 1;
+      y = PrevY + 1;
+      Merit = -0.7 * Dy[PrevY][PrevX] - 0.7 * Dx[PrevY][PrevX];
+      Merit *= (1 - Data2[y][x]) * Grad[y][x];
+      if (Merit > NextMerit)
+      {
+         NextX = x;
+         NextY = y;
+         NextMerit = Merit;
+      }
+
+      /* Consider (-1,0) neighbor */
+      x = PrevX - 1;
+      y = PrevY;
+      Merit = -Dy[PrevY][PrevX];
+      Merit *= (1 - Data2[y][x]) * Grad[y][x];
+      if (Merit > NextMerit)
+      {
+         NextX = x;
+         NextY = y;
+         NextMerit = Merit;
+      }
+
+      /* Consider (-1,-1) neighbor */
+      x = PrevX - 1;
+      y = PrevY - 1;
+      Merit = -0.7 * Dy[PrevY][PrevX] + 0.7 * Dx[PrevY][PrevX];
+      Merit *= (1 - Data2[y][x]) * Grad[y][x];
+      if (Merit > NextMerit)
+      {
+         NextX = x;
+         NextY = y;
+         NextMerit = Merit;
+      }
+
+      /* Consider (0,-1) neighbor */
+      x = PrevX;
+      y = PrevY - 1;
+      Merit = Dx[PrevY][PrevX];
+      Merit *= (1 - Data2[y][x]) * Grad[y][x];
+      if (Merit > NextMerit)
+      {
+         NextX = x;
+         NextY = y;
+         NextMerit = Merit;
+      }
+
+      /* Consider (1,-1) neighbor */
+      x = PrevX + 1;
+      y = PrevY - 1;
+      Merit = 0.7 * Dy[PrevY][PrevX] + 0.7 * Dx[PrevY][PrevX];
+      Merit *= (1 - Data2[y][x]) * Grad[y][x];
+      if (Merit > NextMerit)
+      {
+         NextX = x;
+         NextY = y;
+         NextMerit = Merit;
+      }
+
+      /* Check for end of tracking */
+      Dist = (StartX - PrevX) * (StartX - PrevX) + (StartY - PrevY) * (StartY - PrevY);
+      if ((Dist < 5) && (Count > 10) || (NextMerit == 0))
+         Done = TRUE;
+
+      /* Move to new edge point */
+      else
+      {
+         if (Debug == TRUE)
+            printf("next %d %d\n", NextX, NextY);
+         Data2[NextY][NextX] = 1;
+         PrevX = NextX;
+         PrevY = NextY;
+         NextMerit = 0;
+         Count++;
+      }
+   }
+
+   /* Write information to output image */
+   im_write(Image2, SHORT, (char *) &(Data2[0][0]));
+   im_free2D((char **) Data1);
+   im_free2D((char **) Data2);
+   return (0);
+}
